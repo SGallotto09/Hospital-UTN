@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import LoginView from "../modules/IAM/views/LoginView.vue";
 import MainLayout from "../layouts/MainLayout.vue";
 
-import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
+// import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -25,10 +25,11 @@ const router = createRouter({
 
                 {
                     path: "",
-                    redirect: "/enfermeria"
+                    redirect: "/login"
                 },
 
                 // ATENCIÓN Y ENFERMERÍA
+                /*
                 {
                     path: "enfermeria",
                     name: "enfermeria",
@@ -70,6 +71,7 @@ const router = createRouter({
                             "@/modules/atencion-enfermeria/views/AlertasView.vue"
                         )
                 }
+                        */
             ]
         }
     ]
