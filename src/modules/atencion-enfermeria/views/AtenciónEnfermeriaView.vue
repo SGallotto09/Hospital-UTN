@@ -70,6 +70,7 @@ pacienteSeleccionado.value = null;
 </script>
 
 <template>
+    <EnfermeriaNav/>
 <div class="enfermeria">
 <!-- HEADER DEL MÓDULO -->
 <header class="topbar">
@@ -103,7 +104,6 @@ pacienteSeleccionado.value = null;
     </div>
     </div>
 </header>
-<EnfermeriaNav/>
 
 <!-- CONTENIDO -->
 <main class="content">
