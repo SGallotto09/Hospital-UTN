@@ -1,6 +1,6 @@
 <template>
 <nav class="module-nav">
-<RouterLink to="/enfermeria/atencionEnfermeria">
+<RouterLink to="/enfermeria">
     Panel
 </RouterLink>
 

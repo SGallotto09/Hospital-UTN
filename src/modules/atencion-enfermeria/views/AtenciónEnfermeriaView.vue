@@ -13,6 +13,7 @@ temperatura: number;
 presionArterial: string;
 alerta: boolean;
 ultimoControl: string;
+saturacionOxigeno: number;
 }
 
 const pacientes = ref<Paciente[]>([
@@ -27,6 +28,7 @@ temperatura: 36.5,
 presionArterial: "120/80",
 alerta: false,
 ultimoControl: "14:20",
+saturacionOxigeno: 98
 },
 {
 id: 2,
@@ -39,6 +41,7 @@ temperatura: 36.8,
 presionArterial: "118/76",
 alerta: false,
 ultimoControl: "14:20",
+saturacionOxigeno: 98
 },
 {
 id: 3,
@@ -51,10 +54,87 @@ temperatura: 39.4,
 presionArterial: "130/85",
 alerta: true,
 ultimoControl: "14:15",
+saturacionOxigeno: 98
 },
 ]);
 
+const mensajeConfirmacion = ref("");
+
 const pacienteSeleccionado = ref<Paciente | null>(null);
+// Modal para registrar controles
+const mostrarModalControl = ref(false);
+
+const nuevoControl = ref({
+    pacienteId: "",
+    presionArterial: "",
+    frecuenciaCardiaca: "",
+    temperatura: "",
+    saturacionOxigeno: "",
+    observaciones: ""
+});
+
+function abrirModalControl() {
+    nuevoControl.value = {
+        pacienteId: "",
+        presionArterial: "",
+        frecuenciaCardiaca: "",
+        temperatura: "",
+        saturacionOxigeno: "",
+        observaciones: ""
+    };
+
+    mostrarModalControl.value = true;
+}
+
+function cerrarModalControl() {
+    mostrarModalControl.value = false;
+}
+
+function registrarControl() {
+  const pacienteId = Number(nuevoControl.value.pacienteId);
+
+  const paciente = pacientes.value.find((p) => p.id === pacienteId);
+
+  if (!paciente) {
+    alert("Seleccioná un paciente.");
+    return;
+  }
+
+  const temperatura = Number(nuevoControl.value.temperatura);
+
+  paciente.presionArterial = nuevoControl.value.presionArterial;
+  paciente.frecuenciaCardiaca = Number(nuevoControl.value.frecuenciaCardiaca);
+  paciente.temperatura = temperatura;
+  paciente.saturacionOxigeno = Number(nuevoControl.value.saturacionOxigeno);
+  paciente.alerta = temperatura > 39;
+  paciente.ultimoControl = new Date().toLocaleTimeString("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  cerrarModalControl();
+
+  alert(
+    temperatura > 39
+      ? "¡Control registrado! Se generó una alerta por temperatura alta."
+      : "Control registrado correctamente."
+  );
+}
+function registrarSignosDelPaciente() {
+    if (!pacienteSeleccionado.value) return;
+
+    nuevoControl.value = {
+        pacienteId: String(pacienteSeleccionado.value.id),
+        presionArterial: "",
+        frecuenciaCardiaca: "",
+        temperatura: "",
+        saturacionOxigeno: "",
+        observaciones: ""
+    };
+
+    cerrarPaciente();
+    mostrarModalControl.value = true;
+}
 
 const cantidadAlertas = computed(() => {
 return pacientes.value.filter((paciente) => paciente.alerta).length;
@@ -172,7 +252,10 @@ pacienteSeleccionado.value = null;
         </p>
     </div>
 
-    <button class="primary-button">
+    <button
+        class="primary-button"
+        @click="abrirModalControl"
+    >
         + Registrar control
     </button>
 
@@ -198,9 +281,12 @@ pacienteSeleccionado.value = null;
         </p>
     </div>
 
-    <button class="alert-button">
+    <RouterLink
+        to="/enfermeria/alertas"
+        class="alert-button"
+    >
         Ver alertas
-    </button>
+    </RouterLink>
     </section>
 
     <!-- PACIENTES -->
@@ -444,8 +530,10 @@ pacienteSeleccionado.value = null;
         Cerrar
         </button>
 
-        <button class="primary-button">
-        Registrar signos vitales
+        <button class="primary-button" @click="registrarSignosDelPaciente">
+        
+            Registrar signos vitales
+        
         </button>
 
     </div>
@@ -453,7 +541,150 @@ pacienteSeleccionado.value = null;
     </div>
 
 </div>
+<!-- MODAL REGISTRAR CONTROL -->
+<div
+    v-if="mostrarModalControl"
+    class="modal-overlay"
+    @click.self="cerrarModalControl"
+>
+    <div class="modal modal-control">
 
+        <button
+            class="close-button"
+            @click="cerrarModalControl"
+            type="button"
+        >
+            ×
+        </button>
+
+        <div class="control-modal-header">
+            <span class="modal-label">ENFERMERÍA</span>
+            <h2>Registrar control</h2>
+            <p>Ingresá los signos vitales del paciente.</p>
+        </div>
+
+        <form @submit.prevent="registrarControl">
+
+            <div class="control-form-section">
+                <label for="paciente">Paciente internado</label>
+
+                <select
+                    id="paciente"
+                    v-model="nuevoControl.pacienteId"
+                    required
+                >
+                    <option value="" disabled>
+                        Seleccionar paciente
+                    </option>
+
+                    <option
+                        v-for="paciente in pacientes"
+                        :key="paciente.id"
+                        :value="String(paciente.id)"
+                    >
+                        {{ paciente.nombre }} {{ paciente.apellido }}
+                        - Habitación {{ paciente.habitacion }}
+                    </option>
+                </select>
+            </div>
+
+            <div class="control-form-section">
+                <h3>Signos vitales</h3>
+
+                <div class="control-form-grid">
+
+                    <div class="form-field">
+                        <label for="presion">Presión arterial</label>
+                        <input
+                            id="presion"
+                            v-model="nuevoControl.presionArterial"
+                            type="text"
+                            placeholder="120/80"
+                            required
+                        />
+                        <small>mmHg</small>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="frecuencia">
+                            Frecuencia cardíaca
+                        </label>
+                        <input
+                            id="frecuencia"
+                            v-model="nuevoControl.frecuenciaCardiaca"
+                            type="number"
+                            min="1"
+                            placeholder="72"
+                            required
+                        />
+                        <small>Latidos por minuto</small>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="temperatura">Temperatura</label>
+                        <input
+                            id="temperatura"
+                            v-model="nuevoControl.temperatura"
+                            type="number"
+                            step="0.1"
+                            min="25"
+                            max="45"
+                            placeholder="36.5"
+                            required
+                        />
+                        <small>°C</small>
+                    </div>
+
+                    <div class="form-field">
+                        <label for="saturacion">
+                            Saturación de oxígeno
+                        </label>
+                        <input
+                            id="saturacion"
+                            v-model="nuevoControl.saturacionOxigeno"
+                            type="number"
+                            min="1"
+                            max="100"
+                            placeholder="98"
+                            required
+                        />
+                        <small>%</small>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="control-form-section">
+                <label for="observaciones">Observaciones</label>
+
+                <textarea
+                    id="observaciones"
+                    v-model="nuevoControl.observaciones"
+                    rows="3"
+                    placeholder="Agregar observaciones del control..."
+                ></textarea>
+            </div>
+
+            <div class="control-form-footer">
+                <button
+                    type="button"
+                    class="secondary-button"
+                    @click="cerrarModalControl"
+                >
+                    Cancelar
+                </button>
+
+                <button
+                    type="submit"
+                    class="primary-button"
+                >
+                    Guardar control
+                </button>
+            </div>
+
+        </form>
+    </div>
+</div>
 </div>
 </template>
 
@@ -749,18 +980,26 @@ font-size: 10px;
 }
 
 .alert-button {
-margin-left: auto;
+    display: inline-flex;
 
-padding: 8px 13px;
+    align-items: center;
 
-border: 1px solid #e9b7b7;
-border-radius: 7px;
+    justify-content: center;
 
-background: #ffffff;
-color: #c23939;
+    text-decoration: none;
 
-font-size: 10px;
-cursor: pointer;
+    margin-left: auto;
+
+    padding: 8px 13px;
+
+    border: 1px solid #e9b7b7;
+    border-radius: 7px;
+
+    background: #ffffff;
+    color: #c23939;
+
+    font-size: 10px;
+    cursor: pointer;
 }
 
 /* =========================
@@ -1216,4 +1455,106 @@ grid-template-columns: 1fr;
 grid-template-columns: 1fr;
 }
 }
+/* MODAL REGISTRAR CONTROL */
+
+.modal-control {
+    max-width: 680px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.control-modal-header {
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #e8eef4;
+}
+
+.control-modal-header h2 {
+    margin: 7px 0;
+    color: #123450;
+    font-size: 21px;
+}
+
+.control-modal-header p {
+    margin: 0;
+    color: #8295a8;
+    font-size: 11px;
+}
+
+.control-form-section {
+    margin-bottom: 22px;
+}
+
+.control-form-section h3 {
+    margin: 0 0 14px;
+    color: #123450;
+    font-size: 14px;
+}
+
+.control-form-section label,
+.form-field label {
+    display: block;
+    margin-bottom: 7px;
+    color: #526b80;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.control-form-section input,
+.control-form-section select,
+.control-form-section textarea {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #dce5ed;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #173b59;
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.control-form-section input:focus,
+.control-form-section select:focus,
+.control-form-section textarea:focus {
+    border-color: #1089d4;
+    box-shadow: 0 0 0 3px rgba(16, 137, 212, 0.1);
+}
+
+.control-form-section textarea {
+    resize: vertical;
+}
+
+.control-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.form-field small {
+    display: block;
+    margin-top: 5px;
+    color: #91a2b2;
+    font-size: 9px;
+}
+
+.control-form-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 18px;
+    border-top: 1px solid #e8eef4;
+}
+
+@media (max-width: 600px) {
+    .control-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-control {
+        padding: 22px;
+    }
+}
+
 </style>
