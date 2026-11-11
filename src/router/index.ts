@@ -1,9 +1,10 @@
+
 import { createRouter, createWebHistory } from "vue-router";
 
 import LoginView from "../modules/IAM/views/LoginView.vue";
-import MainLayout from "../layouts/MainLayout.vue";
+import MainLayout from "@/layouts/MainLayout.vue";
 
-// import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
+import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -16,20 +17,18 @@ const router = createRouter({
             component: LoginView
         },
 
-        // SISTEMA CON SIDEBAR
+        // SISTEMA CON SIDEBAR GENERAL
         {
             path: "/",
             component: MainLayout,
 
             children: [
-
                 {
                     path: "",
                     redirect: "/login"
                 },
 
                 // ATENCIÓN Y ENFERMERÍA
-                /*
                 {
                     path: "enfermeria",
                     name: "enfermeria",
@@ -40,38 +39,29 @@ const router = createRouter({
                     path: "enfermeria/pacientes",
                     name: "enfermeria-pacientes",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/PacientesInternadosView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
                 },
 
                 {
                     path: "enfermeria/signos-vitales",
                     name: "enfermeria-signos-vitales",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/SignosVitalesView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/SignosVitalesView.vue")
                 },
 
                 {
                     path: "enfermeria/medicacion",
                     name: "enfermeria-medicacion",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/MedicacionView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
 
                 {
                     path: "enfermeria/alertas",
                     name: "enfermeria-alertas",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/AlertasView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/AlertasView.vue")
                 }
-                        */
             ]
         }
     ]
