@@ -1,3 +1,4 @@
+
 import { createRouter, createWebHistory } from "vue-router";
 
 import LoginView from "../modules/IAM/views/LoginView.vue";
@@ -22,11 +23,9 @@ const router = createRouter({
             component: MainLayout,
 
             children: [
-                // Por ahora Inicio lleva al panel de enfermería
-                // hasta que exista una vista propia de Inicio.
                 {
                     path: "",
-                    redirect: "/enfermeria"
+                    redirect: "/login"
                 },
 
                 // ATENCIÓN Y ENFERMERÍA
@@ -40,36 +39,28 @@ const router = createRouter({
                     path: "enfermeria/pacientes",
                     name: "enfermeria-pacientes",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/PacientesInternadosView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
                 },
 
                 {
                     path: "enfermeria/signos-vitales",
                     name: "enfermeria-signos-vitales",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/SignosVitalesView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/SignosVitalesView.vue")
                 },
 
                 {
                     path: "enfermeria/medicacion",
                     name: "enfermeria-medicacion",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/MedicacionView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
 
                 {
                     path: "enfermeria/alertas",
                     name: "enfermeria-alertas",
                     component: () =>
-                        import(
-                            "@/modules/atencion-enfermeria/views/AlertasView.vue"
-                        )
+                        import("@/modules/atencion-enfermeria/views/AlertasView.vue")
                 }
             ]
         }
