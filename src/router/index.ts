@@ -16,6 +16,12 @@ const router = createRouter({
             component: LoginView
         },
 
+        {
+            path: "/historia-clinica",
+            name: "historia-clinica",
+            component: () => import("../modules/historia-clinica/views/historia-clinica-view.vue")
+        },
+
         // SISTEMA CON SIDEBAR
         {
             path: "/",
