@@ -1,8 +1,8 @@
 
 import { createRouter, createWebHistory } from "vue-router";
 
-import LoginView from "../modules/IAM/views/LoginView.vue";
-import MainLayout from "@/layouts/MainLayout.vue";
+import LoginView from "../BACKEND/modules/IAM/views/LoginView.vue";
+import MainLayout from "../layouts/MainLayout.vue";
 
 import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
 
