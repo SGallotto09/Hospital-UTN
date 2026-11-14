@@ -1,9 +1,9 @@
-import type { SignoVitalRepository } from "../domain/repositories/signo_vital_repository";
-import type { SignoVital } from "../domain/entities/signos_vitales";
+import type { SignoVitalRepository } from "../domain/repositories/signo_vital_repository.js";
+import type { SignoVital } from "../domain/entities/signos_vitales.js";
 
 type DatosSignoVital = Omit<SignoVital, 'id' | 'fecha_hora'>;
 
-export class registrarSignoVital{
+export class RegistrarSignoVital{
     constructor(
         private readonly signoVitalRepository: SignoVitalRepository
     ){}

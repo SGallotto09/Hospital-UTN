@@ -1,6 +1,6 @@
-import type { SignoVitalRepository } from "../domain/repositories/signo_vital_repository";
+import type { SignoVitalRepository } from "../domain/repositories/signo_vital_repository.js";
 
-export class obtenerSingosVitalesPorPacientes{
+export class ObtenerSingosVitalesPorPacientes{
     constructor(
         private readonly signoVitalRepository: SignoVitalRepository
     ){}
