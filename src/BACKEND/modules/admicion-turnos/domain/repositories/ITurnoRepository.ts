@@ -1,5 +1,5 @@
 
-import type { Turno } from "../entities/Turno";
+import type { Turno } from "../entities/Turno.js";
 
 export interface ITurnoRepository {
 
