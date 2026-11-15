@@ -4,8 +4,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import AsignarCamaForm from '../components/AsignarCamaForm.vue'
 import TransicionCamaForm from '../components/TransicionCamaForm.vue'
-import { crearCamasApi, ErrorCamasApi } from '../services/camasApi'
-import type { Cama, CamasApi } from '../types/camas'
+import { crearCamasApi, ErrorCamasApi } from '../services/recursosCamasApi'
+import type { Cama, CamasApi } from '../services/recursosCamasApi'
 
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 
@@ -151,6 +151,34 @@ describe('vista integrada con servicio inyectado', () => {
 })
 
 describe('cliente HTTP', () => {
+  it.each([401, 403, 409, 503])(
+    'conserva el estado HTTP %s y no reintenta la escritura',
+    async (status) => {
+      const solicitar = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ mensaje: 'Operación rechazada' }), {
+          status,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      const api = crearCamasApi('/api/recursos-camas', solicitar)
+      await expect(api.asignar(101, 8)).rejects.toMatchObject({
+        status,
+        message: 'Operación rechazada',
+      })
+      expect(solicitar).toHaveBeenCalledOnce()
+    },
+  )
+  it('conserva el mensaje alternativo si el error HTTP no trae mensaje', async () => {
+    const solicitar = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('{}', {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    await expect(crearCamasApi('/api/recursos-camas', solicitar).listar()).rejects.toThrow(
+      'No se pudo completar la operación.',
+    )
+  })
   it('envía sólo IDs de cama y paciente; la identidad la resuelve IAM', async () => {
     const solicitar = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ asignacion }), {

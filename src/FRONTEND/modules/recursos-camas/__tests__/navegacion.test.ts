@@ -3,14 +3,22 @@ import { describe, expect, it } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import RecursosCamasNav from '../components/RecursosCamasNav.vue'
-import { recursosCamasRoutes } from '../router/routes'
+import routerAplicacion from '../../../../router/index'
 
 async function montarNavegacion(path: string) {
+  const rutas = routerAplicacion
+    .getRoutes()
+    .filter((ruta) => ruta.path === '/recursos-camas' || ruta.path === '/recursos-camas/inventario')
+  expect(rutas).toHaveLength(2)
+  expect(routerAplicacion.resolve('/recursos-camas').name).toBe('recursos-camas')
+  expect(routerAplicacion.resolve('/recursos-camas/inventario').name).toBe(
+    'recursos-camas-inventario',
+  )
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: recursosCamasRoutes.map((ruta) => ({
+    routes: rutas.map((ruta) => ({
       name: ruta.name,
-      path: `/${ruta.path}`,
+      path: ruta.path,
       component: { template: '<div />' },
     })),
   })

@@ -5,13 +5,11 @@ import LoginView from "../FRONTEND/modules/IAM/views/LoginView.vue";
 import MainLayout from "../FRONTEND/layouts/MainLayout.vue";
 
 import AtenciónEnfermeriaView from "../FRONTEND/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
-import { recursosCamasRoutes } from "@/FRONTEND/modules/recursos-camas/router/routes";
 
 const router = createRouter({
     history: createWebHistory(),
 
     routes: [
-        // LOGIN
         {
             path: "/login",
             name: "login",
@@ -28,7 +26,6 @@ const router = createRouter({
                     redirect: "/login"
                 },
 
-                // ATENCIÓN Y ENFERMERÍA
                 {
                     path: "enfermeria",
                     name: "enfermeria",
@@ -70,8 +67,18 @@ const router = createRouter({
                         import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
                 },
 
-                // RECURSOS Y CAMAS
-                ...recursosCamasRoutes
+                {
+                    path: "recursos-camas",
+                    name: "recursos-camas",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/GestionCamasView.vue")
+                },
+                {
+                    path: "recursos-camas/inventario",
+                    name: "recursos-camas-inventario",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/InventarioView.vue")
+                }
             ]
         }
     ]

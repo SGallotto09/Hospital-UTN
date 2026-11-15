@@ -4,14 +4,14 @@ import { flushPromises, mount } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import CamaCard from '../components/CamaCard.vue'
 import TransicionCamaForm from '../components/TransicionCamaForm.vue'
-import { crearCamasApi, ErrorCamasApi } from '../services/camasApi'
+import { crearCamasApi, ErrorCamasApi } from '../services/recursosCamasApi'
 import type {
   Cama,
   CamasApi,
   AccionCama,
   ResultadoTransicion,
   SolicitudTransicion,
-} from '../types/camas'
+} from '../services/recursosCamasApi'
 
 const cama: Cama = {
   id: 101,

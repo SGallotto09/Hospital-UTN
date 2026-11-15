@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Cama, AccionCama } from '../types/camas'
+import type { Cama, AccionCama } from '../services/recursosCamasApi'
 defineProps<{ cama: Cama; deshabilitada: boolean }>()
 defineEmits<{ asignar: [cama: Cama]; transicionar: [cama: Cama, accion: AccionCama] }>()
 </script>

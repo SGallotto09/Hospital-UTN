@@ -2,8 +2,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import InventarioView from '../views/InventarioView.vue'
-import { crearInventarioApi } from '../services/inventarioApi'
-import type { ResultadoConsumo } from '../types/inventario'
+import { crearInventarioApi } from '../services/recursosCamasApi'
+import type { ResultadoConsumo } from '../services/recursosCamasApi'
 
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 
@@ -27,6 +27,15 @@ const responder = (datos: unknown, status = 200) =>
   })
 
 describe('HU 3.1: inventario Vue y cliente HTTP', () => {
+  it('conserva el mensaje alternativo y el tipo de error del inventario', async () => {
+    const solicitar = vi.fn<typeof fetch>().mockResolvedValue(responder({}, 500))
+    const error = await crearInventarioApi('/api/recursos-camas', solicitar)
+      .listar()
+      .catch((error) => error)
+    expect(error.constructor).toBe(Error)
+    expect(error.message).toBe('No se pudo consultar el inventario.')
+    expect(solicitar).toHaveBeenCalledOnce()
+  })
   it('consulta y muestra stock, piso cero y existencias agotadas', async () => {
     const solicitar = vi.fn<typeof fetch>().mockResolvedValue(responder({ insumos }))
     const wrapper = mount(InventarioView, {

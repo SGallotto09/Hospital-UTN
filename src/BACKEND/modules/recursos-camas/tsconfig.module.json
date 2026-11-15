@@ -2,8 +2,8 @@
   "extends": "../../../../tsconfig.app.json",
   "include": [
     "./**/*.ts",
-    "../../../modules/recursos-camas/**/*.ts",
-    "../../../modules/recursos-camas/**/*.vue"
+    "../../../FRONTEND/modules/recursos-camas/**/*.ts",
+    "../../../FRONTEND/modules/recursos-camas/**/*.vue"
   ],
   "exclude": ["./node_modules"],
   "compilerOptions": {
