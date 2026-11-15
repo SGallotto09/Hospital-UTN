@@ -1,13 +1,13 @@
 
-import { Turno } from "../../../domain/entities/Turno";
+import { Turno } from "../../../domain/entities/Turno.js";
 
 import type {
     ITurnoRepository
-} from "../../../domain/repositories/ITurnoRepository";
+} from "../../../domain/repositories/ITurnoRepository.js";
 
 import type {
     IPacienteRepository
-} from "../../../domain/repositories/IPacienteRepository";
+} from "../../../domain/repositories/IPacienteRepository.js";
 
 
 export interface ReservarTurnoDTO {

@@ -1,5 +1,5 @@
 
-import type { Triaje, EstadoTriaje } from "../entities/Triaje";
+import type { Triaje, EstadoTriaje } from "../entities/Triaje.js";
 
 export interface ITriajeRepository {
 

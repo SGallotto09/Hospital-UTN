@@ -1,9 +1,9 @@
 
-import { Paciente } from "../../../domain/entities/Paciente";
+import { Paciente } from "../../../domain/entities/Paciente.js";
 
 import type {
     IPacienteRepository
-} from "../../../domain/repositories/IPacienteRepository";
+} from "../../../domain/repositories/IPacienteRepository.js";
 
 
 export interface RegistrarPacienteDTO {

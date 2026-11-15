@@ -1,5 +1,5 @@
 
-import type { Paciente } from "../entities/Paciente";
+import type { Paciente } from "../entities/Paciente.js";
 
 export interface IPacienteRepository {
 
