@@ -46,6 +46,11 @@
         <span>Atención y enfermería</span>
     </RouterLink>
 
+    <RouterLink to="/recursos-camas" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">▤</span>
+        <span>Recursos y camas</span>
+    </RouterLink>
+
     <RouterLink to="/facturacion" class="nav-link">
         <span class="nav-icon">$</span>
         <span>Facturación</span>

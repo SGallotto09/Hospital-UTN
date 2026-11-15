@@ -1,0 +1,34 @@
+// Destino propuesto: src/BACKEND/app.ts. NO aplicado.
+import express, { type RequestHandler, type ErrorRequestHandler } from 'express'
+import { Database } from './database/connectionDB.js'
+import { crearModuloLecturaRecursosCamas } from './modules/recursos-camas/recursosCamas.module.js'
+import type { ObtenerActor } from './modules/recursos-camas/presentation/controlers/CamasController.js'
+
+export interface SeguridadAplicacion {
+  autenticar: RequestHandler
+  obtenerActor: ObtenerActor
+}
+
+// El módulo IAM del grupo debe entregar estas dos implementaciones reales.
+// Sin ellas no se debe montar una ruta pública ni fabricar una identidad.
+export function crearApp(seguridad: SeguridadAplicacion) {
+  const app = express()
+  app.disable('x-powered-by')
+  app.use(express.json())
+  app.use('/api/recursos-camas', seguridad.autenticar,
+    crearModuloLecturaRecursosCamas({
+      database: Database.getInstance(), obtenerActor: seguridad.obtenerActor,
+    }))
+  app.use((_req, res) => { res.status(404).json({ mensaje: 'La ruta solicitada no está disponible.' }) })
+  const manejarError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
+    if (res.headersSent) { next(error); return }
+    if (error instanceof SyntaxError && 'status' in error && error.status === 400) {
+      res.status(400).json({ mensaje: 'El cuerpo JSON no es válido.' })
+      return
+    }
+    console.error('Error no controlado de la API', error)
+    res.status(500).json({ mensaje: 'No se pudo completar la solicitud.' })
+  }
+  app.use(manejarError)
+  return app
+}

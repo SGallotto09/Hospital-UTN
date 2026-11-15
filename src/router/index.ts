@@ -5,6 +5,7 @@ import LoginView from "../BACKEND/modules/IAM/views/LoginView.vue";
 import MainLayout from "../layouts/MainLayout.vue";
 
 import AtenciónEnfermeriaView from "@/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
+import { recursosCamasRoutes } from "@/modules/recursos-camas/router/routes";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -66,7 +67,9 @@ const router = createRouter({
                     name: "enfermeria-alertas",
                     component: () =>
                         import("@/modules/atencion-enfermeria/views/AlertasView.vue")
-                }
+                },
+
+                ...recursosCamasRoutes
             ]
         }
     ]

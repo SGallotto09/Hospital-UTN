@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.module.json",
+  "include": [
+    "./domain/**/*.ts",
+    "./application/**/*.ts",
+    "./presentation/validators/**/*.ts",
+    "../../../modules/recursos-camas/**/*.ts",
+    "../../../modules/recursos-camas/**/*.vue"
+  ]
+}
