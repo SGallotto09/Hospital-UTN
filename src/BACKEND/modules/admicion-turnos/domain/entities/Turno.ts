@@ -1,9 +1,9 @@
-import { crearEstadoTurno } from "../states/turno/EstadoTurno";
+import { crearEstadoTurno } from "../states/turno/EstadoTurno.js";
 
 import type {
     EstadoTurno,
     EstadoTurnoNombre
-} from "../states/turno/EstadoTurno";
+} from "../states/turno/EstadoTurno.js";
 
 export interface TurnoProps {
     id: number | null;
