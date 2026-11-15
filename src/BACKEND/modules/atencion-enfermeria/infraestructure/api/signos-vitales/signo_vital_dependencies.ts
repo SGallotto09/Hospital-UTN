@@ -1,9 +1,11 @@
 
-import { SignoVitalRepositoryMySQL } from '../repositories/signo_vital_repository_mysql.js';
+import { SignoVitalRepositoryMySQL } from '../../repositories/signo_vital_repository_mysql.js';
 
-import { RegistrarSignoVital } from '../../use-cases/registrar_signo_vital.js';
-import { ObtenerSignosVitales } from '../../use-cases/obtener_signos_vitales.js';
-import { ObtenerSingosVitalesPorPacientes } from '../../use-cases/obetener_signos_vitales_por_pacientes.js';
+import { RegistrarSignoVital } from '../../../use-cases/signos-vitales/registrar_signo_vital.js';
+import { ObtenerSignosVitales } from '../../../use-cases/signos-vitales/obtener_signos_vitales.js';
+import { ObtenerSingosVitalesPorPacientes } from '../../../use-cases/signos-vitales/obetener_signos_vitales_por_pacientes.js';
+
+
 
 import { SignoVitalController } from './signo_vital_controller.js';
 

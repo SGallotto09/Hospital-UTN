@@ -1,4 +1,4 @@
-import type { SignoVitalRepository } from "../domain/repositories/signo_vital_repository.js";
+import type { SignoVitalRepository } from "../../domain/repositories/signo_vital_repository.js";
 
 export class ObtenerSingosVitalesPorPacientes{
     constructor(
