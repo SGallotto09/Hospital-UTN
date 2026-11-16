@@ -84,6 +84,11 @@ async function cerrarSesion() {
         <span>Facturación</span>
     </RouterLink>
 
+    <RouterLink to="/usuarios/registro" class="nav-link">
+        <span class="nav-icon">&#9817;</span>
+        <span>Administrar usuarios</span>
+    </RouterLink>
+
     </nav>
 
     <!-- USUARIO -->
