@@ -6,6 +6,7 @@ export function iniciarProcesadorConsumos(
   database: Pick<Database, 'query'>,
   consumir: ConsumidorMedicacionAdministrada,
   intervalo = 5000,
+  procesarFacturacion?: () => Promise<void>,
 ): () => Promise<void> {
   let detenido = false
   let temporizador: ReturnType<typeof setTimeout> | undefined
@@ -45,6 +46,14 @@ export function iniciarProcesadorConsumos(
     } catch (error) {
       console.error('No se pudieron procesar los consumos pendientes.', error)
     } finally {
+      // Facturación se recupera desde datos confirmados, incluso si el inventario falló.
+      if (!detenido && procesarFacturacion) {
+        try {
+          await procesarFacturacion()
+        } catch (error) {
+          console.error('No se pudo recuperar la facturación de medicación.', error)
+        }
+      }
       if (!detenido) temporizador = setTimeout(ejecutar, intervalo)
     }
   }

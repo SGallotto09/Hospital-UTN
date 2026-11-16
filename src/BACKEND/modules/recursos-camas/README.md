@@ -45,6 +45,23 @@ SolicitudAsignacion. Las entidades se utilizan cuando hay reglas de dominio que 
 
 ## HU 3.1: consumo de inventario
 
+Integración final con main 8507413: se conservan Turnos, Triaje, notificaciones
+Socket.IO, Facturación y sus estrategias. La recuperación automática de cargos
+usa el mismo ciclo del procesador, sin otro temporizador. Lee consumos confirmados
+sin cargo asociado y llama al caso de uso de Facturación con la cantidad persistida.
+El índice único de cargos por administración impide cargos duplicados concurrentes.
+Las consultas se recorren por lotes y vuelven al inicio; un error de cuenta o precio
+no bloquea las otras administraciones y se reintenta en vueltas posteriores.
+No se utiliza el EventEmitter como fuente de entrega. Sus contratos anteriores
+se conservan, pero el arranque no registra el listener en memoria.
+
+Facturación exige administración confirmada y puede recuperar consumos pendientes,
+procesados o en revision. No modifica inventario ni impide que el stock se procese
+si falla un cargo. Necesita cuenta activa y precio configurado; no se cargan esos
+datos automáticamente. El cierre espera también la recuperación en curso antes de
+cerrar el pool. Los protocolos existentes usan MyISAM: se conserva su implementación
+original y no se presentan como una transacción atómica.
+
 Integración actualizada con Enfermería 7342332: su vista envía cantidad_administrada
 en unidades enteras positivas, que deben coincidir con la cantidad indicada. Se valida
 en Vue, controlador y repositorio con la indicación bloqueada. Para clientes anteriores
@@ -193,10 +210,14 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
 
 ## Verificación
 
-Resultado actual del módulo: **379 pruebas aprobadas, sin omisiones** (20 archivos).
+Resultado actual del módulo: **382 pruebas aprobadas, sin omisiones** (20 archivos).
 Enfermería: **13 pruebas aprobadas** de protocolos y vista de medicación (2 archivos).
 TypeScript del módulo, frontend y servidor comprobado. Concurrencia MySQL real pendiente.
-ESLint global detecta una variable sin uso preexistente en Atención y Enfermería; no se modifica.
+Integración final: **432 pruebas aprobadas en 33 archivos**, ejecutadas desde `src`
+para excluir las pruebas compiladas que puede generar TypeScript en `dist`.
+TypeScript global y backend, ESLint de archivos integrados y Vite aprobados.
+ESLint global detecta siete errores preexistentes en repositorios de Admisión,
+SocketTypes y useNotificaciones; esos archivos no se modifican en esta integración.
 
 Desde la raíz:
 

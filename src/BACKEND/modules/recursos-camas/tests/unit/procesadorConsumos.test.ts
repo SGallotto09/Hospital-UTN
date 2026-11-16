@@ -18,6 +18,42 @@ afterEach(() => {
 })
 
 describe('procesador asíncrono de consumos persistidos', () => {
+  it('espera también a Facturación durante el cierre y no superpone ciclos', async () => {
+    const query = vi.fn().mockResolvedValue([[], []])
+    let terminar!: () => void
+    const facturar = vi.fn(() => new Promise<void>(resolve => { terminar = resolve }))
+    const detener = iniciarProcesadorConsumos({ query }, vi.fn(), 5000, facturar)
+    await vi.advanceTimersByTimeAsync(20000)
+    expect(query).toHaveBeenCalledOnce()
+    expect(facturar).toHaveBeenCalledOnce()
+    let cerrado = false
+    const cierre = detener().then(() => { cerrado = true })
+    await Promise.resolve()
+    expect(cerrado).toBe(false)
+    terminar()
+    await cierre
+    expect(cerrado).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('un fallo de inventario no impide recuperar Facturación', async () => {
+    const query = vi.fn().mockRejectedValue(new Error('Fallo de lectura de inventario'))
+    const facturar = vi.fn().mockResolvedValue(undefined)
+    const detener = iniciarProcesadorConsumos({ query }, vi.fn(), 5000, facturar)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(facturar).toHaveBeenCalledOnce()
+    await detener()
+  })
+
+  it('un fallo de Facturación no detiene los siguientes ciclos de inventario', async () => {
+    const query = vi.fn().mockResolvedValue([[], []])
+    const facturar = vi.fn().mockRejectedValueOnce(new Error('Error de facturación')).mockResolvedValueOnce(undefined)
+    const detener = iniciarProcesadorConsumos({ query }, vi.fn(), 5000, facturar)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(query).toHaveBeenCalledTimes(2)
+    expect(facturar).toHaveBeenCalledTimes(2)
+    await detener()
+  })
   it('lee pendientes y construye el evento estable', async () => {
     const query = vi.fn().mockResolvedValue([[fila], []])
     const consumir = vi.fn().mockResolvedValue(resultado)
