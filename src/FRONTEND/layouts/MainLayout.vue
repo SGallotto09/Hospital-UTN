@@ -52,12 +52,6 @@ async function cerrarSesion() {
     <!-- NAVEGACIÓN -->
     <nav class="main-nav">
 
-    <!-- INICIO -->
-    <RouterLink to="/" class="nav-link">
-        <span class="nav-icon">⌂</span>
-        <span>Inicio</span>
-    </RouterLink>
-
     <!-- MÓDULOS -->
     <RouterLink to="/admisiones" class="nav-link module-link">
         <span class="nav-icon">▣</span>
