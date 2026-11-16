@@ -15,6 +15,7 @@ import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/d
 import protocoloAtencionRoutes from "./modules/atencion-enfermeria/infraestructure/api/protocolos/protocolo_atencion_routes.js";
 import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
 import { iniciarProcesadorConsumos } from "./modules/recursos-camas/infraestructure/procesarConsumosPendientes.js";
+import historiaClinicaRoutes from "./modules/historia-clinica/infraestructure/api/historia_clinica_routes.js";
 
 // ==========================================
 // IAM
@@ -214,6 +215,7 @@ const registroRoutes = new RegistroRoutes(registroController);
 app.use("/api/auth", authRoutes.obtenerRouter());
 
 app.use("/api/auth", registroRoutes.obtenerRouter());
+app.use("/api/historia-clinica", historiaClinicaRoutes);
 
 // ==========================================
 // FACTURACIÓN Y ADMINISTRACIÓN

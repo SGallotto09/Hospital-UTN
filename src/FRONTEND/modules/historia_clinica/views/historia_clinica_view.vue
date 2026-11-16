@@ -1,372 +1,191 @@
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import HistoriaClinicaNav from "../components/historia_clinica_nav.vue";
+import { ref, computed, onMounted } from 'vue';
+import HistoriaClinicaNav from '../components/historia_clinica_nav.vue';
 
 interface Paciente {
     id: number;
     nombre: string;
     apellido: string;
     dni: string;
-    fechaNacimiento: string;
-    sexo: string;
-    domicilio: string;
+    fecha_nacimiento: string;
+    genero: string;
     telefono: string;
-    obraSocial: string;
-    numeroAfiliado: string;
-    numeroHistoria: string;
+    email: string;
+    obra_social: number;
 }
-
 interface Alergia {
     id: number;
-    pacienteId: number;
     sustancia: string;
     reaccion: string;
-    gravedad: "Leve" | "Moderada" | "Grave";
-    fecha: string;
+    gravedad: string;
+    estado: string;
+    fecha_deteccion: string;
+    fecha_registro: string;
     autor: string;
-    estado: "Activa" | "Descartada";
 }
-
 interface Antecedente {
     id: number;
-    pacienteId: number;
     parentesco: string;
-    condicion: string;
-    observaciones: string;
-    fecha: string;
+    enfermedad: string;
+    observaciones: string | null;
+    fecha_registro: string;
     autor: string;
 }
-
 interface Evolucion {
     id: number;
-    pacienteId: number;
-    tipo: string;
+    diagnostico: string;
     descripcion: string;
-    fecha: string;
+    fecha_registro: string;
     autor: string;
 }
-
 interface Estudio {
     id: number;
-    pacienteId: number;
-    tipo: string;
-    fecha: string;
-    resultado: string;
+    tipo_estudio: string;
+    descripcion: string | null;
+    resultado: string | null;
+    fecha_registro: string;
 }
-
-// PACIENTES
-const pacientes = ref<Paciente[]>([
-    {
-        id: 1,
-        nombre: "Carlos",
-        apellido: "López",
-        dni: "35123456",
-        fechaNacimiento: "1985-04-12",
-        sexo: "Masculino",
-        domicilio: "Av. San Martín 450",
-        telefono: "3564-123456",
-        obraSocial: "APROSS",
-        numeroAfiliado: "12345678",
-        numeroHistoria: "HC-0001"
-    },
-    {
-        id: 2,
-        nombre: "Ana",
-        apellido: "Rojas",
-        dni: "38987654",
-        fechaNacimiento: "1990-08-22",
-        sexo: "Femenino",
-        domicilio: "Belgrano 320",
-        telefono: "3564-654321",
-        obraSocial: "OSDE",
-        numeroAfiliado: "87654321",
-        numeroHistoria: "HC-0002"
-    },
-    {
-        id: 3,
-        nombre: "Pedro",
-        apellido: "Gómez",
-        dni: "33111222",
-        fechaNacimiento: "1982-11-05",
-        sexo: "Masculino",
-        domicilio: "Rivadavia 120",
-        telefono: "3564-112233",
-        obraSocial: "Sin cobertura",
-        numeroAfiliado: "-",
-        numeroHistoria: "HC-0003"
-    }
-]);
-
-const buscador = ref("");
-const pacienteSeleccionadoId = ref(1);
-
-const pacienteSeleccionado = computed(() => {
-    return pacientes.value.find(
-        (paciente) => paciente.id === pacienteSeleccionadoId.value
-    ) || null;
-});
-
+interface Historia {
+    paciente: Paciente;
+    alergias: Alergia[];
+    antecedentesFamiliares: Antecedente[];
+    evolucionesMedicas: Evolucion[];
+    estudiosClinicos: Estudio[];
+}
+const pacientes = ref<Paciente[]>([]);
+const buscador = ref('');
+const pacienteSeleccionadoId = ref<number | null>(null);
+const pacienteSeleccionado = computed(
+    () => pacientes.value.find((p) => p.id === pacienteSeleccionadoId.value) ?? null,
+);
 const pacientesFiltrados = computed(() => {
     const texto = buscador.value.toLowerCase().trim();
-
-    if (!texto) return pacientes.value;
-
-    return pacientes.value.filter((paciente) => {
-        return (
-            `${paciente.nombre} ${paciente.apellido}`
-                .toLowerCase().includes(texto) ||
-            paciente.dni.includes(texto) ||
-            paciente.numeroHistoria.toLowerCase().includes(texto)
-        );
-    });
+    return pacientes.value.filter((p) =>
+        (p.nombre + ' ' + p.apellido + ' ' + p.dni).toLowerCase().includes(texto),
+    );
 });
+const alergiasPaciente = ref<Alergia[]>([]);
+const antecedentesPaciente = ref<Antecedente[]>([]);
+const evolucionesPaciente = ref<Evolucion[]>([]);
+const estudiosPaciente = ref<Estudio[]>([]);
+const puedeRegistrar = ref(false);
+const cargandoPacientes = ref(true);
+const cargandoHistoria = ref(false);
+const historiaDisponible = ref(false);
+const guardando = ref(false);
+const error = ref('');
+const mensaje = ref('');
+let solicitud = 0;
+const nuevaAlergia = ref({ sustancia: '', reaccion: '', gravedad: 'leve', fecha_deteccion: '' });
+const nuevoAntecedente = ref({ parentesco: '', condicion: '', observaciones: '' });
+const nuevaEvolucion = ref({ diagnostico: '', descripcion: '' });
 
-function seleccionarPaciente(paciente: Paciente) {
+async function consultar(ruta: string, datos?: object) {
+    const respuesta = await fetch('/api/historia-clinica' + ruta, {
+        method: datos ? 'POST' : 'GET',
+        credentials: 'same-origin',
+        ...(datos
+            ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) }
+            : {}),
+    });
+    if (!respuesta.ok) {
+        if (respuesta.status === 401)
+            throw new Error('Debe iniciar sesion para consultar la historia clinica.');
+        if (respuesta.status === 403)
+            throw new Error('Su rol no tiene permisos para esta operacion.');
+        const detalle = await respuesta.json().catch(() => ({}));
+        throw new Error(detalle.mensaje || 'No se pudo completar la operacion.');
+    }
+    return respuesta.json();
+}
+function formatearFecha(valor: string) {
+    const fecha = new Date(valor);
+    return Number.isNaN(fecha.getTime()) ? '-' : fecha.toLocaleDateString('es-AR');
+}
+function vaciarHistoria() {
+    historiaDisponible.value = false;
+    alergiasPaciente.value = [];
+    antecedentesPaciente.value = [];
+    evolucionesPaciente.value = [];
+    estudiosPaciente.value = [];
+}
+async function seleccionarPaciente(paciente: Paciente) {
+    if (guardando.value) return;
+    const actual = ++solicitud;
     pacienteSeleccionadoId.value = paciente.id;
-}
-
-// ALERGIAS
-const alergias = ref<Alergia[]>([
-    {
-        id: 1,
-        pacienteId: 1,
-        sustancia: "Penicilina",
-        reaccion: "Erupción cutánea",
-        gravedad: "Moderada",
-        fecha: "10/11/2026 09:30",
-        autor: "Dr. Silva",
-        estado: "Activa"
-    },
-    {
-        id: 2,
-        pacienteId: 2,
-        sustancia: "Ibuprofeno",
-        reaccion: "Reacción alérgica",
-        gravedad: "Leve",
-        fecha: "08/11/2026 11:20",
-        autor: "Dra. Martínez",
-        estado: "Activa"
+    vaciarHistoria();
+    error.value = '';
+    mensaje.value = '';
+    nuevaAlergia.value = { sustancia: '', reaccion: '', gravedad: 'leve', fecha_deteccion: '' };
+    nuevoAntecedente.value = { parentesco: '', condicion: '', observaciones: '' };
+    nuevaEvolucion.value = { diagnostico: '', descripcion: '' };
+    cargandoHistoria.value = true;
+    try {
+        const historia: Historia = await consultar('/paciente/' + paciente.id);
+        if (actual !== solicitud) return;
+        alergiasPaciente.value = historia.alergias;
+        antecedentesPaciente.value = historia.antecedentesFamiliares;
+        evolucionesPaciente.value = historia.evolucionesMedicas;
+        estudiosPaciente.value = historia.estudiosClinicos;
+        historiaDisponible.value = true;
+    } catch (fallo) {
+        if (actual === solicitud)
+            error.value =
+                fallo instanceof Error ? fallo.message : 'No se pudo conectar con el servidor.';
+    } finally {
+        if (actual === solicitud) cargandoHistoria.value = false;
     }
-]);
-
-const alergiasPaciente = computed(() => {
-    return alergias.value.filter(
-        (alergia) =>
-            alergia.pacienteId === pacienteSeleccionadoId.value
-    );
-});
-
-const nuevaAlergia = ref({
-    sustancia: "",
-    reaccion: "",
-    gravedad: "Leve" as "Leve" | "Moderada" | "Grave"
-});
-
+}
+async function guardarRegistro(ruta: string, datos: object) {
+    if (
+        guardando.value ||
+        cargandoHistoria.value ||
+        !puedeRegistrar.value ||
+        !pacienteSeleccionado.value
+    )
+        return;
+    const paciente = pacienteSeleccionado.value;
+    guardando.value = true;
+    error.value = '';
+    mensaje.value = '';
+    try {
+        await consultar(ruta, { ...datos, id_paciente: paciente.id });
+        guardando.value = false;
+        await seleccionarPaciente(paciente);
+        mensaje.value = 'Registro guardado correctamente.';
+    } catch (fallo) {
+        error.value =
+            fallo instanceof Error ? fallo.message : 'No se pudo conectar con el servidor.';
+    } finally {
+        guardando.value = false;
+    }
+}
 function registrarAlergia() {
-    if (!nuevaAlergia.value.sustancia.trim() ||
-        !nuevaAlergia.value.reaccion.trim()) {
-        alert("Completá todos los campos de la alergia.");
-        return;
-    }
-
-    alergias.value.push({
-        id: Date.now(),
-        pacienteId: pacienteSeleccionadoId.value,
-        sustancia: nuevaAlergia.value.sustancia,
-        reaccion: nuevaAlergia.value.reaccion,
-        gravedad: nuevaAlergia.value.gravedad,
-        fecha: new Date().toLocaleString("es-AR"),
-        autor: "Usuario actual",
-        estado: "Activa"
-    });
-
-    nuevaAlergia.value = {
-        sustancia: "",
-        reaccion: "",
-        gravedad: "Leve"
-    };
-
-    alert("Alergia registrada correctamente.");
+    return guardarRegistro('/alergias', nuevaAlergia.value);
 }
-
-function descartarAlergia(alergia: Alergia) {
-    const motivo = prompt("Ingresá el motivo de la corrección:");
-
-    if (!motivo || !motivo.trim()) return;
-
-    // Se conserva el registro original.
-    // Se agrega uno nuevo que referencia la corrección.
-    alergias.value.push({
-        ...alergia,
-        id: Date.now(),
-        fecha: new Date().toLocaleString("es-AR"),
-        autor: "Usuario actual",
-        estado: "Descartada",
-        reaccion: `Corrección: ${motivo}`
-    });
-
-    alert("Se registró la corrección de la alergia.");
-}
-
-// ANTECEDENTES FAMILIARES
-const antecedentes = ref<Antecedente[]>([
-    {
-        id: 1,
-        pacienteId: 1,
-        parentesco: "Padre",
-        condicion: "Diabetes tipo 2",
-        observaciones: "Diagnosticado a los 55 años.",
-        fecha: "09/11/2026 10:00",
-        autor: "Dr. Silva"
-    },
-    {
-        id: 2,
-        pacienteId: 2,
-        parentesco: "Madre",
-        condicion: "Hipertensión arterial",
-        observaciones: "En tratamiento.",
-        fecha: "08/11/2026 12:00",
-        autor: "Dra. Martínez"
-    }
-]);
-
-const antecedentesPaciente = computed(() => {
-    return antecedentes.value
-        .filter(
-            (antecedente) =>
-                antecedente.pacienteId === pacienteSeleccionadoId.value
-        )
-        .sort((a, b) => b.id - a.id);
-});
-
-const nuevoAntecedente = ref({
-    parentesco: "",
-    condicion: "",
-    observaciones: ""
-});
-
 function registrarAntecedente() {
-    if (!nuevoAntecedente.value.parentesco ||
-        !nuevoAntecedente.value.condicion.trim()) {
-        alert("Completá el parentesco y la condición.");
-        return;
-    }
-
-    antecedentes.value.push({
-        id: Date.now(),
-        pacienteId: pacienteSeleccionadoId.value,
+    return guardarRegistro('/antecedentes', {
         parentesco: nuevoAntecedente.value.parentesco,
-        condicion: nuevoAntecedente.value.condicion,
+        enfermedad: nuevoAntecedente.value.condicion,
         observaciones: nuevoAntecedente.value.observaciones,
-        fecha: new Date().toLocaleString("es-AR"),
-        autor: "Usuario actual"
     });
-
-    nuevoAntecedente.value = {
-        parentesco: "",
-        condicion: "",
-        observaciones: ""
-    };
-
-    alert("Antecedente registrado correctamente.");
 }
-
-// EVOLUCIONES MÉDICAS
-const evoluciones = ref<Evolucion[]>([
-    {
-        id: 1,
-        pacienteId: 1,
-        tipo: "Consulta médica",
-        descripcion: "Paciente presenta evolución favorable. Continúa tratamiento indicado por neumonía.",
-        fecha: "12/11/2026 10:30",
-        autor: "Dr. Silva"
-    },
-    {
-        id: 2,
-        pacienteId: 1,
-        tipo: "Control médico",
-        descripcion: "Se observa mejoría en el cuadro respiratorio. Se indica continuar seguimiento.",
-        fecha: "13/11/2026 09:15",
-        autor: "Dra. Martínez"
-    },
-    {
-        id: 3,
-        pacienteId: 2,
-        tipo: "Consulta médica",
-        descripcion: "Paciente estable luego de intervención quirúrgica.",
-        fecha: "12/11/2026 14:00",
-        autor: "Dr. Silva"
-    }
-]);
-
-const evolucionesPaciente = computed(() => {
-    return evoluciones.value
-        .filter(
-            (evolucion) =>
-                evolucion.pacienteId === pacienteSeleccionadoId.value
-        )
-        .sort((a, b) => b.id - a.id);
-});
-
-const nuevaEvolucion = ref({
-    tipo: "Consulta médica",
-    descripcion: ""
-});
-
 function registrarEvolucion() {
-    if (!nuevaEvolucion.value.descripcion.trim()) {
-        alert("Ingresá la descripción de la evolución.");
-        return;
-    }
-
-    evoluciones.value.push({
-        id: Date.now(),
-        pacienteId: pacienteSeleccionadoId.value,
-        tipo: nuevaEvolucion.value.tipo,
-        descripcion: nuevaEvolucion.value.descripcion,
-        fecha: new Date().toLocaleString("es-AR"),
-        autor: "Usuario actual"
-    });
-
-    nuevaEvolucion.value = {
-        tipo: "Consulta médica",
-        descripcion: ""
-    };
-
-    alert("Evolución médica registrada correctamente.");
+    return guardarRegistro('/evoluciones', nuevaEvolucion.value);
 }
-
-// ESTUDIOS CLÍNICOS
-const estudios = ref<Estudio[]>([
-    {
-        id: 1,
-        pacienteId: 1,
-        tipo: "Radiografía de tórax",
-        fecha: "10/11/2026",
-        resultado: "Infiltrado pulmonar en base derecha."
-    },
-    {
-        id: 2,
-        pacienteId: 1,
-        tipo: "Análisis de sangre",
-        fecha: "11/11/2026",
-        resultado: "Leucocitos elevados."
-    },
-    {
-        id: 3,
-        pacienteId: 2,
-        tipo: "Hemograma",
-        fecha: "09/11/2026",
-        resultado: "Valores dentro de parámetros esperados."
+onMounted(async () => {
+    try {
+        const sesion = await consultar('/sesion');
+        puedeRegistrar.value = sesion.puedeRegistrar;
+        pacientes.value = await consultar('/pacientes');
+        if (pacientes.value[0]) await seleccionarPaciente(pacientes.value[0]);
+    } catch (fallo) {
+        error.value =
+            fallo instanceof Error ? fallo.message : 'No se pudo conectar con el servidor.';
+    } finally {
+        cargandoPacientes.value = false;
     }
-]);
-
-const estudiosPaciente = computed(() => {
-    return estudios.value.filter(
-        (estudio) =>
-            estudio.pacienteId === pacienteSeleccionadoId.value
-    );
 });
 </script>
 
@@ -396,6 +215,9 @@ const estudiosPaciente = computed(() => {
     </header>
 
     <main class="content">
+        <p v-if="error" role="alert" class="feedback-error">{{ error }}</p>
+        <p v-if="mensaje" role="status">{{ mensaje }}</p>
+        <p v-if="cargandoPacientes || cargandoHistoria" role="status">Cargando datos...</p>
 
         <!-- BUSCADOR Y SELECCIÓN -->
         <section class="section-header">
@@ -403,7 +225,7 @@ const estudiosPaciente = computed(() => {
                 <span class="section-label">PACIENTES</span>
                 <h2>Consultar historia clínica</h2>
                 <p>
-                    Buscá un paciente por nombre, apellido, DNI o número de historia.
+                    Buscá un paciente por nombre, apellido o DNI.
                 </p>
             </div>
         </section>
@@ -427,6 +249,7 @@ const estudiosPaciente = computed(() => {
                         v-for="paciente in pacientesFiltrados"
                         :key="paciente.id"
                         class="patient-option"
+                        :disabled="guardando"
                         :class="{
                             selected:
                                 pacienteSeleccionadoId === paciente.id
@@ -448,7 +271,7 @@ const estudiosPaciente = computed(() => {
                             </span>
 
                             <small>
-                                {{ paciente.numeroHistoria }}
+                                Paciente #{{ paciente.id }}
                             </small>
                         </div>
 
@@ -487,7 +310,7 @@ const estudiosPaciente = computed(() => {
 
                         <p>
                             Historia clínica:
-                            {{ pacienteSeleccionado.numeroHistoria }}
+                            Paciente #{{ pacienteSeleccionado.id }}
                         </p>
                     </div>
                 </div>
@@ -502,13 +325,13 @@ const estudiosPaciente = computed(() => {
                     <div class="profile-field">
                         <span>Fecha de nacimiento</span>
                         <strong>
-                            {{ pacienteSeleccionado.fechaNacimiento }}
+                            {{ formatearFecha(pacienteSeleccionado.fecha_nacimiento) }}
                         </strong>
                     </div>
 
                     <div class="profile-field">
                         <span>Sexo</span>
-                        <strong>{{ pacienteSeleccionado.sexo }}</strong>
+                        <strong>{{ pacienteSeleccionado.genero }}</strong>
                     </div>
 
                     <div class="profile-field">
@@ -517,20 +340,13 @@ const estudiosPaciente = computed(() => {
                     </div>
 
                     <div class="profile-field">
-                        <span>Domicilio</span>
-                        <strong>{{ pacienteSeleccionado.domicilio }}</strong>
+                        <span>Email</span>
+                        <strong>{{ pacienteSeleccionado.email }}</strong>
                     </div>
 
                     <div class="profile-field">
                         <span>Obra social</span>
-                        <strong>{{ pacienteSeleccionado.obraSocial }}</strong>
-                    </div>
-
-                    <div class="profile-field">
-                        <span>Número de afiliado</span>
-                        <strong>
-                            {{ pacienteSeleccionado.numeroAfiliado }}
-                        </strong>
+                        <strong>ID {{ pacienteSeleccionado.obra_social }}</strong>
                     </div>
 
                 </div>
@@ -538,7 +354,7 @@ const estudiosPaciente = computed(() => {
 
         </section>
 
-        <template v-if="pacienteSeleccionado">
+        <template v-if="pacienteSeleccionado && !cargandoHistoria && historiaDisponible">
 
             <!-- ALERGIAS -->
             <section id="alergias" class="clinical-section">
@@ -553,7 +369,7 @@ const estudiosPaciente = computed(() => {
                     </div>
 
                     <span class="count">
-                        {{ alergiasPaciente.filter(a => a.estado === 'Activa').length }}
+                        {{ alergiasPaciente.filter(a => a.estado === 'activa').length }}
                         activas
                     </span>
                 </div>
@@ -561,7 +377,7 @@ const estudiosPaciente = computed(() => {
                 <div class="clinical-card">
 
                     <div
-                        v-if="alergiasPaciente.filter(a => a.estado === 'Activa').length === 0"
+                        v-if="alergiasPaciente.filter(a => a.estado === 'activa').length === 0"
                         class="empty"
                     >
                         No hay alergias activas registradas.
@@ -571,7 +387,7 @@ const estudiosPaciente = computed(() => {
                         v-for="alergia in alergiasPaciente"
                         :key="alergia.id"
                         class="record-row"
-                        :class="{ inactive: alergia.estado === 'Descartada' }"
+                        :class="{ inactive: alergia.estado === 'descartada' }"
                     >
                         <div class="record-icon allergy-icon">
                             !
@@ -584,8 +400,8 @@ const estudiosPaciente = computed(() => {
                                 <span
                                     class="status"
                                     :class="{
-                                        active: alergia.estado === 'Activa',
-                                        discarded: alergia.estado === 'Descartada'
+                                        active: alergia.estado === 'activa',
+                                        discarded: alergia.estado === 'descartada'
                                     }"
                                 >
                                     {{ alergia.estado }}
@@ -598,25 +414,18 @@ const estudiosPaciente = computed(() => {
 
                             <span class="record-meta">
                                 Gravedad: {{ alergia.gravedad }}
-                                · {{ alergia.fecha }}
+                                · {{ formatearFecha(alergia.fecha_deteccion) }}
                                 · {{ alergia.autor }}
                             </span>
                         </div>
-
-                        <button
-                            v-if="alergia.estado === 'Activa'"
-                            class="secondary-button"
-                            @click="descartarAlergia(alergia)"
-                        >
-                            Corregir
-                        </button>
                     </article>
 
-                    <div class="form-divider"></div>
+                    <div v-if="puedeRegistrar" class="form-divider"></div>
 
-                    <h3>Registrar nueva alergia</h3>
+                    <h3 v-if="puedeRegistrar">Registrar nueva alergia</h3>
 
-                    <form @submit.prevent="registrarAlergia">
+                    <form v-if="puedeRegistrar" @submit.prevent="registrarAlergia">
+                        <fieldset :disabled="guardando || cargandoHistoria">
 
                         <div class="form-grid">
 
@@ -643,12 +452,16 @@ const estudiosPaciente = computed(() => {
                             </div>
 
                             <div class="form-group">
+                                <label>Fecha de deteccion</label>
+                                <input v-model="nuevaAlergia.fecha_deteccion" type="date" required />
+                            </div>
+                            <div class="form-group">
                                 <label>Gravedad</label>
 
                                 <select v-model="nuevaAlergia.gravedad">
-                                    <option>Leve</option>
-                                    <option>Moderada</option>
-                                    <option>Grave</option>
+                                    <option value="leve">Leve</option>
+                                    <option value="moderada">Moderada</option>
+                                    <option value="grave">Grave</option>
                                 </select>
                             </div>
 
@@ -660,6 +473,7 @@ const estudiosPaciente = computed(() => {
                             </button>
                         </div>
 
+                    </fieldset>
                     </form>
                 </div>
             </section>
@@ -696,7 +510,7 @@ const estudiosPaciente = computed(() => {
                         </div>
 
                         <div class="record-main">
-                            <strong>{{ antecedente.condicion }}</strong>
+                            <strong>{{ antecedente.enfermedad }}</strong>
 
                             <p>
                                 Parentesco: {{ antecedente.parentesco }}
@@ -704,17 +518,18 @@ const estudiosPaciente = computed(() => {
 
                             <span class="record-meta">
                                 {{ antecedente.observaciones || 'Sin observaciones' }}
-                                · {{ antecedente.fecha }}
+                                · {{ formatearFecha(antecedente.fecha_registro) }}
                                 · {{ antecedente.autor }}
                             </span>
                         </div>
                     </article>
 
-                    <div class="form-divider"></div>
+                    <div v-if="puedeRegistrar" class="form-divider"></div>
 
-                    <h3>Registrar antecedente</h3>
+                    <h3 v-if="puedeRegistrar">Registrar antecedente</h3>
 
-                    <form @submit.prevent="registrarAntecedente">
+                    <form v-if="puedeRegistrar" @submit.prevent="registrarAntecedente">
+                        <fieldset :disabled="guardando || cargandoHistoria">
 
                         <div class="form-grid">
 
@@ -766,6 +581,7 @@ const estudiosPaciente = computed(() => {
                             </button>
                         </div>
 
+                    </fieldset>
                     </form>
                 </div>
             </section>
@@ -806,10 +622,10 @@ const estudiosPaciente = computed(() => {
                         <div class="evolution-content">
 
                             <div class="record-title">
-                                <strong>{{ evolucion.tipo }}</strong>
+                                <strong>{{ evolucion.diagnostico }}</strong>
 
                                 <span class="record-meta">
-                                    {{ evolucion.fecha }}
+                                    {{ formatearFecha(evolucion.fecha_registro) }}
                                 </span>
                             </div>
 
@@ -826,21 +642,16 @@ const estudiosPaciente = computed(() => {
                         </div>
                     </article>
 
-                    <div class="form-divider"></div>
+                    <div v-if="puedeRegistrar" class="form-divider"></div>
 
-                    <h3>Registrar evolución médica</h3>
+                    <h3 v-if="puedeRegistrar">Registrar evolución médica</h3>
 
-                    <form @submit.prevent="registrarEvolucion">
+                    <form v-if="puedeRegistrar" @submit.prevent="registrarEvolucion">
+                        <fieldset :disabled="guardando || cargandoHistoria">
 
                         <div class="form-group">
-                            <label>Tipo de evolución</label>
-
-                            <select v-model="nuevaEvolucion.tipo">
-                                <option>Consulta médica</option>
-                                <option>Control médico</option>
-                                <option>Seguimiento</option>
-                                <option>Observación clínica</option>
-                            </select>
+                            <label>Diagnostico</label>
+                            <input v-model="nuevaEvolucion.diagnostico" type="text" maxlength="255" required />
                         </div>
 
                         <div class="form-group">
@@ -860,6 +671,7 @@ const estudiosPaciente = computed(() => {
                             </button>
                         </div>
 
+                    </fieldset>
                     </form>
                 </div>
             </section>
@@ -900,14 +712,14 @@ const estudiosPaciente = computed(() => {
                         </div>
 
                         <div class="record-main">
-                            <strong>{{ estudio.tipo }}</strong>
+                            <strong>{{ estudio.tipo_estudio }}</strong>
 
                             <span class="record-meta">
-                                Fecha: {{ estudio.fecha }}
+                                Fecha: {{ formatearFecha(estudio.fecha_registro) }}
                             </span>
 
                             <p>
-                                {{ estudio.resultado }}
+                                {{ estudio.resultado || estudio.descripcion || 'Sin resultado registrado.' }}
                             </p>
                         </div>
 
@@ -926,6 +738,9 @@ const estudiosPaciente = computed(() => {
 </template>
 
 <style scoped>
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+fieldset:disabled { opacity: 0.65; }
+.feedback-error { color: #b91c1c; }
 .historia-clinica {
 min-height: 100vh;
 background: #f5f8fc;
@@ -1321,21 +1136,7 @@ background: #edf1f4;
 color: #718496;
 }
 
-.secondary-button {
-padding: 8px 12px;
-border: 1px solid #dce5eb;
-border-radius: 7px;
-background: white;
-color: #526879;
-font-size: 10px;
-font-weight: 600;
-cursor: pointer;
-}
 
-.secondary-button:hover {
-border-color: #087fc4;
-color: #087fc4;
-}
 
 .form-divider {
 height: 1px;
@@ -1508,10 +1309,6 @@ gap: 12px;
 
 .record-row {
 flex-wrap: wrap;
-}
-
-.record-row .secondary-button {
-margin-left: 52px;
 }
 
 .form-grid {
