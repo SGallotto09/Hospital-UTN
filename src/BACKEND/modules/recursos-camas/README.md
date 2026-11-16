@@ -1,12 +1,11 @@
-﻿# Gestión de Recursos y Camas
+# Gestión de Recursos y Camas
 
 Módulo del monolito Hospital-UTN: backend Node.js/Express/TypeScript y frontend Vue 3.
 Referencias: historias de usuario y dump `hospital_utn (3).sql` (MySQL 8.0.46).
 
-Primera integración de lectura: las consultas productivas se verificaron contra
-MySQL real; la base actual contiene **0 camas y 0 insumos**. El montaje HTTP de
-sólo lectura está preparado, pero siguen pendientes IAM, Express compartido y proxy.
-Ver diagnóstico, propuestas no aplicadas y pasos en [integracion/README.md](integracion/README.md).
+Integración compartida implementada: servidor Express, sesiones IAM, política de roles aprobada,
+withTransaction() y proxy /api. La asignación no se monta sin Admisión.
+Ver estado real y pendientes en [integracion/README.md](integracion/README.md).
 
 ## Implementado
 
@@ -32,7 +31,7 @@ en producción. La recepción automática desde Enfermería todavía no está co
 - `infraestructure`: adaptadores MySQL, mapeo y operaciones SQL compartidas entre repositorios.
 - `presentation`: validación HTTP, controlador y rutas.
 - `recursosCamas.module.ts`: composición explícita de dependencias.
-- `src/modules/recursos-camas`: frontend, sin imports de los detalles internos del backend.
+- `src/FRONTEND/modules/recursos-camas`: frontend, sin imports de los detalles internos del backend.
 
 La consulta del mapa usa IConsultaCamas directamente; no necesita una clase que
 sólo delegue. Los DTOs se reúnen en CamasDTO.ts y la entrada de asignación reutiliza
@@ -191,26 +190,21 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
 
 ## Pendiente de integración
 
-- **MySQL:** Database actual sólo permite lectura segura para este uso. El contrato
-  ProveedorTransaccionesMysql requiere conexión exclusiva, BEGIN/COMMIT/ROLLBACK y
-  liberación en finally. No usar BEGIN y COMMIT como queries sobre la conexión única
-  compartida. Falta verificar bloqueos, rollback y concurrencia contra MySQL real.
-- **Dependencias:** instalar/coordinar Express y sus tipos. mysql2 y tsx ya están
-  instalados según el manifest existente. El manifest local es temporal; no se
-  modificó el package.json ni el lockfile global.
-- **IAM:** implementar ObtenerActor con identidad verificada y permisos. La ocultación
-  de acciones por permisos en el frontend depende del contexto de sesión del grupo.
-  La lectura de inventario añade el permiso `inventario:consultar`.
+- **MySQL:** withTransaction() ya entrega una conexión exclusiva del pool compartido.
+  No ejecutar BEGIN/COMMIT mediante query(). Verificación contra MySQL real pendiente.
+- **Dependencias:** instaladas según el manifest recibido de main, sin modificar
+  manifests ni lockfiles. No se añadieron dependencias.
+- **IAM:** la sesión real y los permisos aprobados ya están conectados al servidor.
+  Falta conectar el login visual a su API y proporcionar contexto de permisos a Vue.
 - **Enfermería e inventario:** acordar el evento, entrega durable, registro transaccional
   de consumos y canal de resultados. Sin ese registro el consumidor no escribe stock.
 - **Admisión:** implementar IPacienteGateway mediante su API pública. La FK sigue
   protegiendo integridad si el paciente desaparece después de la validación.
 - **Altas y traslados:** integrar el comando con el proceso clínico real. La liberación
   operativa no registra un alta médica ni asigna el destino de un traslado.
-- **Arranque:** montar crearModuloRecursosCamas con express.json(), autenticación y un
-  manejador global de errores inesperados que responda 500 JSON sin exponer SQL.
-- **Frontend:** incorporar recursosCamasRoutes al MainLayout, agregar navegación y
-  configurar `/api` en el mismo origen o mediante el proxy acordado.
+- **Arranque:** rutas protegidas montadas, proxy /api configurado y errores globales JSON.
+  Faltan credenciales locales para comprobar lecturas y escrituras reales.
+- **Frontend:** rutas en src/router/index.ts; login visual pendiente de IAM.
 - **Monitores:** actualización manual o posterior al comando; no hay eventos durables
   ni actualización en tiempo real entre clientes.
 - **Auditoría:** el esquema permite estado actual y fecha de egreso, pero no actor,
@@ -222,17 +216,16 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
 
 ## Verificación
 
-Resultado tras preparar la integración de lectura: **216 pruebas aprobadas y 25 HTTP omitidas**
-por falta de Express (13 archivos aprobados y 1 omitido). Se conservaron los escenarios anteriores.
-ESLint y TypeScript core aprobados.
-TypeScript completo sigue bloqueado por `express` y sus tipos. Las lecturas se
-verificaron contra MySQL real; la concurrencia de escrituras sigue pendiente.
+Resultado de la integración: **305 pruebas aprobadas, sin omisiones** (17 archivos).
+Suite desde la raíz: **550 pruebas aprobadas** (30 archivos).
+TypeScript del módulo, frontend y servidor comprobado. Concurrencia MySQL real pendiente.
+ESLint global detecta una variable sin uso preexistente en Atención y Enfermería; no se modifica.
 
 Desde la raíz:
 
 ```powershell
 node node_modules/vitest/vitest.mjs run --config src/BACKEND/modules/recursos-camas/vitest.config.ts --configLoader runner
-node node_modules/eslint/bin/eslint.js src/BACKEND/modules/recursos-camas src/modules/recursos-camas
+node node_modules/eslint/bin/eslint.js src/BACKEND/modules/recursos-camas src/FRONTEND/modules/recursos-camas
 node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p src/BACKEND/modules/recursos-camas/tsconfig.core.json
 node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p src/BACKEND/modules/recursos-camas/tsconfig.module.json
 ```

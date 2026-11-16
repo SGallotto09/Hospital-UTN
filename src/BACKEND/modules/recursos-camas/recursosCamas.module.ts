@@ -17,7 +17,7 @@ import type { ConsumidorMedicacionAdministrada } from './application/ports/Medic
 
 export interface DependenciasRecursosCamas {
   database: Pick<Database, 'query'>
-  pacientes: IPacienteGateway
+  pacientes?: IPacienteGateway
   obtenerActor: ObtenerActor
   transacciones?: ProveedorTransaccionesMysql
   registroConsumos?: RegistroConsumosMysql
@@ -56,17 +56,18 @@ export function crearModuloLecturaRecursosCamas(
   return crearRecursosCamasRouter(camas, inventario, true)
 }
 
-// Se monta en /api/recursos-camas desde el arranque compartido (integración pendiente).
+// Se monta en /api/recursos-camas desde el arranque compartido.
 // No crea conexiones ni reemplaza silenciosamente el proveedor transaccional faltante.
 export function crearModuloRecursosCamas(deps: DependenciasRecursosCamas) {
   const consultaCamas = new MysqlConsultaCamas(new ConsultaMysqlCompartida(deps.database))
-  const asignar = new AsignarCama(
-    new MysqlAsignacionCamaRepository(deps.transacciones),
-    deps.pacientes,
-  )
+  const asignar = deps.pacientes
+    ? new AsignarCama(new MysqlAsignacionCamaRepository(deps.transacciones), deps.pacientes)
+    : undefined
   const transicionar = new TransicionarCama(new MysqlTransicionCamaRepository(deps.transacciones))
   return crearRecursosCamasRouter(
     new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar),
     new InventarioController(crearRepositorioInsumos(deps), deps.obtenerActor),
+    false,
+    !!deps.pacientes,
   )
 }

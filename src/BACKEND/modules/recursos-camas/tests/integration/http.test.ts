@@ -28,7 +28,7 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
   beforeAll(async () => {
     const nombreModulo = 'express'
     const express = (await import(/* @vite-ignore */ nombreModulo))
-      .default as typeof import('express').default
+      .default as typeof import('express')
     const { crearRecursosCamasRouter } =
       await import('../../presentation/routes/recursosCamas.routes.js')
     const { crearModuloLecturaRecursosCamas } = await import('../../recursosCamas.module.js')

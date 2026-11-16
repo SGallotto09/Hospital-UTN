@@ -42,12 +42,13 @@ export function crearRecursosCamasRouter(
   controller: CamasController,
   inventario: InventarioController,
   soloLectura = false,
+  permitirAsignacion = true,
 ): Router {
   const router = Router()
   router.get('/camas', controller.listar)
   router.get('/insumos', inventario.listar)
   if (!soloLectura) {
-    router.post('/asignaciones', controller.asignar)
+    if (permitirAsignacion) router.post('/asignaciones', controller.asignar)
     router.post('/camas/:idCama/liberacion', controller.transicionar('liberar'))
     router.post(
       '/camas/:idCama/confirmacion-limpieza',

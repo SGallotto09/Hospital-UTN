@@ -1,6 +1,7 @@
 {
   "extends": "../../../../tsconfig.app.json",
   "include": [
+    "../../types/**/*.d.ts",
     "./**/*.ts",
     "../../../FRONTEND/modules/recursos-camas/**/*.ts",
     "../../../FRONTEND/modules/recursos-camas/**/*.vue"
