@@ -59,12 +59,7 @@ async function cerrarSesion() {
     </RouterLink>
 
     <!-- MÓDULOS -->
-    <RouterLink to="/pacientes" class="nav-link module-link">
-        <span class="nav-icon">♙</span>
-        <span>Pacientes</span>
-    </RouterLink>
-
-    <RouterLink to="/admisiones" class="nav-link">
+    <RouterLink to="/admisiones" class="nav-link module-link">
         <span class="nav-icon">▣</span>
         <span>Admisión y turnos</span>
     </RouterLink>
