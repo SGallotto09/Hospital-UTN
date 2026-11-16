@@ -132,17 +132,20 @@ export class Triaje {
         }
     }
 
+    
     private validarObservaciones(observaciones: string | null): void {
 
         if (
             observaciones !== null &&
-            observaciones.length > 255
+            observaciones.trim().length > 45
         ) {
             throw new Error(
-                "Las observaciones no pueden superar los 255 caracteres."
+                "Las observaciones no pueden superar los 45 caracteres."
             );
         }
+        
     }
+
 
     private validarFecha(fecha: Date): void {
 

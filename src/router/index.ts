@@ -6,6 +6,9 @@ import MainLayout from "../FRONTEND/layouts/MainLayout.vue";
 
 import AtenciónEnfermeriaView from "../FRONTEND/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
 
+import AdmissionLayout from "../FRONTEND/layouts/AdmissionLayout.vue";
+import DashboardView from "@/FRONTEND/modules/admicion-turnos/views/DashboardView.vue";
+
 const router = createRouter({
     history: createWebHistory(),
 
@@ -66,6 +69,49 @@ const router = createRouter({
                     name: "enfermeria-alertas",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
+                },
+                {
+                    path: "admisiones",
+                    component: AdmissionLayout,
+                    redirect: { name: "dashboard-turnos" },
+
+                    children: [
+                        {
+                            path: "dashboard",
+                            name: "dashboard-turnos",
+                            component: DashboardView
+                        },
+                        {
+                            path: "pacientes",
+                            name: "pacientes-turnos",
+                            component: () =>
+                                import("@/FRONTEND/modules/admicion-turnos/views/PacientesView.vue")
+                        },
+                        {
+                            path: "agenda",
+                            name: "agenda-medica",
+                            component: () =>
+                                import("@/FRONTEND/modules/admicion-turnos/views/AgendaView.vue")
+                        },
+                        {
+                            path: "turnos",
+                            name: "gestion-turnos",
+                            component: () =>
+                                import("@/FRONTEND/modules/admicion-turnos/views/TurnosView.vue")
+                        },
+                        {
+                            path: "lista-espera",
+                            name: "lista-espera",
+                            component: () =>
+                                import("@/FRONTEND/modules/admicion-turnos/views/ListaEsperaView.vue")
+                        },
+                        {
+                            path: "triaje",
+                            name: "triaje",
+                            component: () =>
+                                import("@/FRONTEND/modules/admicion-turnos/views/TriajeView.vue")
+                        }
+                    ]
                 }
             ]
         }

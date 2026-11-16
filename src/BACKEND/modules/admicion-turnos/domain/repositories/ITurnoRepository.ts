@@ -23,5 +23,5 @@ export interface ITurnoRepository {
     insertarEntreturno(
         turnoOriginal: Turno,
         nuevoTurno: Turno
-    ): Promise<void>;
+    ): Promise<Turno>;
 }

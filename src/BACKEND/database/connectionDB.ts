@@ -48,6 +48,7 @@ export class Database {
         } finally {
             conexion?.release();
         }
+
     }
 
     public async withTransaction<T>(operacion: (conexion: PoolConnection) => Promise<T>): Promise<T> {
