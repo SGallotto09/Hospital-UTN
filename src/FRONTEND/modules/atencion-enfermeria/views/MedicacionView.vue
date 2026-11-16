@@ -1,4 +1,5 @@
 
+
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
 
@@ -15,7 +16,6 @@ interface DosisProgramada {
 }
 
 const medicaciones = ref<DosisProgramada[]>([]);
-const id_enfermero = ref("");
 const mensaje = ref("");
 const cargando = ref(false);
 const administrando = ref<string | null>(null);
@@ -51,7 +51,10 @@ async function cargarMedicaciones(): Promise<void> {
 
     try {
         const respuesta = await fetch(
-            "http://localhost:3001/api/administracion-medicacion"
+            "/api/administracion-medicacion",
+            {
+                credentials: "include"
+            }
         );
 
         if (!respuesta.ok) {
@@ -73,16 +76,6 @@ async function administrarMedicacion(
 ): Promise<void> {
     mensaje.value = "";
 
-    const id_enfermero_numero = Number(id_enfermero.value);
-
-    if (
-        !Number.isInteger(id_enfermero_numero) ||
-        id_enfermero_numero <= 0
-    ) {
-        mensaje.value = "Ingresá un ID de enfermero válido";
-        return;
-    }
-
     if (medicacion.estado === "Administrada") {
         mensaje.value = "Esta dosis ya fue administrada";
         return;
@@ -93,15 +86,15 @@ async function administrarMedicacion(
 
     try {
         const respuesta = await fetch(
-            "http://localhost:3001/api/administracion-medicacion",
+            "/api/administracion-medicacion",
             {
                 method: "POST",
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
                     id_indicacion_medica: medicacion.id_indicacion_medica,
-                    id_enfermero: id_enfermero_numero,
                     horario_programado: medicacion.horario_programado
                 })
             }
@@ -150,17 +143,6 @@ onMounted(cargarMedicaciones);
                 <span>pendientes</span>
             </div>
         </header>
-
-        <div class="nurse-field">
-            <label for="enfermero">ID del enfermero (provisorio)</label>
-            <input
-                id="enfermero"
-                v-model="id_enfermero"
-                type="number"
-                min="1"
-                placeholder="Ingresá tu ID"
-            />
-        </div>
 
         <p v-if="mensaje" class="message">
             {{ mensaje }}
@@ -320,21 +302,6 @@ h1 {
 .pending-counter span {
     color: #718496;
     font-size: 11px;
-}
-
-.nurse-field {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 18px;
-    color: #526879;
-    font-size: 12px;
-}
-
-.nurse-field input {
-    padding: 9px 12px;
-    border: 1px solid #dce5eb;
-    border-radius: 7px;
 }
 
 .medication-list {
