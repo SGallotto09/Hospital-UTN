@@ -1,5 +1,25 @@
-import type { AdministracionMedicacion } from '../entities/administracion_medicacion.js';
+
+import type { IndicacionMedicacion } from '../entities/indicacion_medicacion.js';
 
 export interface AdministracionMedicacionRepository {
-    obtenerTodas(): Promise<AdministracionMedicacion[]>;
+    obtenerTodas(): Promise<IndicacionMedicacion[]>;
+
+    administrar(
+        id_indicacion_medica: number,
+        id_enfermero: number,
+        fecha_hora: Date
+    ): Promise<void>;
+
+    obtenerDatosIndicacion(
+        id_indicacion_medica: number
+    ): Promise<{
+        fecha: string;
+        hora_inicio: string;
+        frecuencia_horas: number;
+    } | null>;
+
+    existeDosisAdministrada(
+        id_indicacion_medica: number,
+        horario_programado: Date
+    ): Promise<boolean>;
 }

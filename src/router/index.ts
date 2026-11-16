@@ -60,13 +60,6 @@ const router = createRouter({
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
-
-                {
-                    path: "enfermeria/alertas",
-                    name: "enfermeria-alertas",
-                    component: () =>
-                        import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
-                }
             ]
         }
     ]

@@ -22,11 +22,20 @@ export class SignoVitalRepositoryMySQL implements SignoVitalRepository{
         const [insertResult] = resultado;
         const id = (insertResult as {insertId: number}).insertId;
 
+    
         const [filas] = await this.db.query(
             'SELECT * FROM signos_vitales WHERE id = ?',
             [id]
         );
-        return (filas as SignoVital[])[0];
+
+            const signo_vital = (filas as SignoVital[])[0];
+
+            if (!signo_vital) {
+                throw new Error('No se pudo recuperar el signo vital registrado');
+            }
+            
+        return signo_vital;
+
     }
     async obtenerPorPaciente(idPaciente: number): Promise<SignoVital[]> {
         const [filas] = await this.db.query(

@@ -7,4 +7,8 @@ router.get('/', (req, res) => {
     return administracionMedicacionController.obtenerTodas(req, res);
 });
 
+router.post('/', (req, res) => {
+    return administracionMedicacionController.administrar(req, res);
+});
+
 export default router;

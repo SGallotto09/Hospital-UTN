@@ -15,10 +15,6 @@
 <RouterLink to="/enfermeria/medicacion">
     Medicación
 </RouterLink>
-
-<RouterLink to="/enfermeria/alertas">
-    Alertas
-</RouterLink>
 </nav>
 </template>
 
