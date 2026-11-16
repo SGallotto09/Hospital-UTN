@@ -67,8 +67,6 @@ app.use("/api/auth", registroRoutes.obtenerRouter());
 
 const database = Database.getInstance();
 
-// Agregar aquí los routers de otros módulos cuando sus responsables los entreguen.
-// Sin gateway de Admisión no se registra la ruta de asignación.
 app.use("/api/recursos-camas", verificarSesion, crearModuloRecursosCamas({
     database,
     obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),
