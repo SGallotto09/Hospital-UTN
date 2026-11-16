@@ -10,6 +10,9 @@ import AdmissionLayout from "../FRONTEND/layouts/AdmissionLayout.vue";
 import DashboardView from "@/FRONTEND/modules/admicion-turnos/views/DashboardView.vue";
 import RegistroUsuariosView from "../FRONTEND/modules/IAM/RegistroUsuariosView.vue";
 
+// FACTURACIÓN Y ADMINISTRACIÓN
+import FacturacionView from "../FRONTEND/modules/facturacion-administracion/views/FacturacionView.vue";
+
 const router = createRouter({
     history: createWebHistory(),
 
@@ -78,6 +81,13 @@ const router = createRouter({
                     path: "usuarios/registro",
                     name: "registro-usuarios",
                     component: RegistroUsuariosView
+                },
+
+                // FACTURACIÓN Y ADMINISTRACIÓN
+                {
+                    path: "facturacion",
+                    name: "facturacion",
+                    component: FacturacionView
                 },
 
                 // ADMISIÓN Y TURNOS

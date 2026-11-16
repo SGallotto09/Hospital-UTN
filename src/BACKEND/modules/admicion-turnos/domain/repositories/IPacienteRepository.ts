@@ -9,6 +9,9 @@ export interface IPacienteRepository {
     // Buscar un paciente por su DNI
     buscarPorDni(dni: string): Promise<Paciente | null>;
 
+    // Obtener todos los pacientes registrados
+    listarTodos(): Promise<Paciente[]>;
+
     // Registrar un nuevo paciente
     guardar(paciente: Paciente): Promise<Paciente>;
 
