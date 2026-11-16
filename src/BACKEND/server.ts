@@ -9,6 +9,18 @@ import { AuthController } from "./modules/IAM/infraestructure/api/AuthController
 import { AuthRoutes } from "./modules/IAM/infraestructure/api/AuthRoutes.js";
 import { RegistroController } from "./modules/IAM/infraestructure/api/RegistroController.js";
 import { RegistroRoutes } from "./modules/IAM/infraestructure/api/RegistroRoutes.js";
+import { createServer } from "node:http";
+import { configurarSocketIO } from "./real-time/SocketServer.js";
+import { MySQLPacienteRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLPacienteRepository.js";
+import { RegistrarPaciente } from "./modules/admicion-turnos/application/use-cases/admision/RegistrarPaciente.js";
+import { ListarPacientes } from "./modules/admicion-turnos/application/use-cases/pacientes/ListarPacientes.js";
+import { PacienteController } from "./modules/admicion-turnos/infraestructure/api/PacienteController.js";
+import { PacienteRoutes } from "./modules/admicion-turnos/infraestructure/api/PacienteRoutes.js";
+import { MySQLObraSocialRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLObraSocialRepository.js";
+import { ListarObrasSociales } from "./modules/admicion-turnos/application/use-cases/obras-sociales/ListarObrasSociales.js";
+import { ObraSocialController } from "./modules/admicion-turnos/infraestructure/api/ObraSocialController.js";
+import { ObraSocialRoutes } from "./modules/admicion-turnos/infraestructure/api/ObraSocialRoutes.js";
+
 import { Database } from "./database/connectionDB.js";
 import session from "express-session";
 import "dotenv/config";
@@ -16,7 +28,6 @@ import { verificarSesion } from "./modules/IAM/infraestructure/middlewares/verif
 import { crearModuloRecursosCamas, crearConsumidorConsumos } from "./modules/recursos-camas/recursosCamas.module.js";
 import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from "./modules/recursos-camas/infraestructure/api/obtenerActorSesion.js";
 import { crearProveedorTransacciones } from "./modules/recursos-camas/infraestructure/database/ContratosMysql.js";
-import { MySQLPacienteRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLPacienteRepository.js";
 import { crearPacienteGatewayAdmision } from "./modules/recursos-camas/infraestructure/crearPacienteGatewayAdmision.js";
 import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
 import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
@@ -33,7 +44,7 @@ const app = express();
 
 app.use(express.json());
 
-app.use(session({
+const sessionMiddleware = session({
     secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
@@ -43,7 +54,9 @@ app.use(session({
         sameSite: "lax",
         maxAge: 1000 * 60 * 60
     }
-}));
+});
+
+app.use(sessionMiddleware);
 
 
 const usuarioRepository = new UsuarioMySQLRepository();
@@ -70,19 +83,44 @@ const registroRoutes = new RegistroRoutes(registroController);
 app.use("/api/auth", authRoutes.obtenerRouter());
 app.use("/api/auth", registroRoutes.obtenerRouter());
 
+const pacienteRepository = new MySQLPacienteRepository();
+
+const registrarPaciente = new RegistrarPaciente(pacienteRepository);
+const listarPacientes = new ListarPacientes(pacienteRepository);
+
+const pacienteController = new PacienteController(registrarPaciente, listarPacientes);
+
+const pacienteRoutes = new PacienteRoutes(pacienteController);
+
+app.use("/api/admisiones/pacientes", pacienteRoutes.obtenerRouter());
 const database = Database.getInstance();
 const transacciones = crearProveedorTransacciones(database);
 const registroConsumos = crearRegistroConsumosMysql();
 
 app.use("/api/administracion-medicacion", verificarSesion, administracionMedicacionRoutes);
-
 app.use("/api/recursos-camas", verificarSesion, crearModuloRecursosCamas({
     database,
     obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),
     transacciones,
     registroConsumos,
-    pacientes: crearPacienteGatewayAdmision(new MySQLPacienteRepository()),
+    pacientes: crearPacienteGatewayAdmision(pacienteRepository),
 }));
+
+const obraSocialRepository = new MySQLObraSocialRepository();
+
+const listarObrasSociales = new ListarObrasSociales(
+    obraSocialRepository
+);
+
+const obraSocialController = new ObraSocialController(
+    listarObrasSociales
+);
+
+const obraSocialRoutes = new ObraSocialRoutes(
+    obraSocialController
+);
+
+app.use("/api/admisiones/obras-sociales", obraSocialRoutes.obtenerRouter());
 
 app.use((_req, res) => {
     res.status(404).json({ mensaje: "Ruta no encontrada" });
@@ -102,33 +140,49 @@ const manejarError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
 };
 app.use(manejarError);
 
+
 if (!await database.probarConexion()) {
+
     await database.cerrar();
-    throw new Error("No se pudo iniciar el servidor: MySQL no está disponible");
+
+    throw new Error(
+        "No se pudo iniciar el servidor: MySQL no está disponible"
+    );
+
 }
+
+
+const servidor = createServer(app);
+const io = configurarSocketIO(servidor, sessionMiddleware);
 let detenerProcesador: (() => Promise<void>) | undefined;
-const servidor = app.listen(PORT, () => {
-    detenerProcesador = iniciarProcesadorConsumos(database,
-        crearConsumidorConsumos({ database, transacciones, registroConsumos }));
-    console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
-});
+let cerrando = false;
+
+async function cerrarServidor() {
+    if (cerrando) return;
+    cerrando = true;
+    try {
+        // Socket.IO cierra sus conexiones y espera el cierre del HTTP compartido.
+        await io.close();
+        await detenerProcesador?.();
+        await database.cerrar();
+    } catch (error) {
+        console.error("No se pudieron cerrar los recursos del servidor", error);
+        process.exitCode = 1;
+    }
+}
+
 servidor.on("error", (error) => {
     console.error("No se pudo iniciar el servidor HTTP", error);
     process.exitCode = 1;
-    void (detenerProcesador?.() ?? Promise.resolve()).then(() => database.cerrar()).catch((errorCierre: unknown) => {
-        console.error("No se pudo cerrar MySQL", errorCierre);
-    });
+    void cerrarServidor();
 });
-let cerrando = false;
-function cerrarServidor() {
-    if (cerrando) return;
-    cerrando = true;
-    servidor.close(() => {
-        void (detenerProcesador?.() ?? Promise.resolve()).then(() => database.cerrar()).catch((error: unknown) => {
-            console.error("No se pudo cerrar MySQL", error);
-            process.exitCode = 1;
-        });
-    });
-}
-process.once("SIGINT", cerrarServidor);
-process.once("SIGTERM", cerrarServidor);
+
+servidor.listen(PORT, () => {
+    detenerProcesador = iniciarProcesadorConsumos(database,
+        crearConsumidorConsumos({ database, transacciones, registroConsumos }));
+    console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
+    console.log("Socket.IO inicializado correctamente");
+});
+
+process.once("SIGINT", () => { void cerrarServidor(); });
+process.once("SIGTERM", () => { void cerrarServidor(); });
