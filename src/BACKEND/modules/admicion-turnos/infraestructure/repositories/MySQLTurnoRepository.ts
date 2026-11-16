@@ -71,13 +71,10 @@ export class MySQLTurnoRepository implements ITurnoRepository {
     ): Promise<T> {
 
         if (this.connection) {
-
             return operacion(this.connection);
-
         }
 
-        return this.database.ejecutarTransaccion(operacion);
-
+        return this.database.withTransaction(operacion);
     }
 
 

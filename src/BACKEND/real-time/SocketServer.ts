@@ -2,21 +2,20 @@
 import { Server } from "socket.io";
 
 import type {
-    Server as HttpServer
+    Server as HttpServer,
+    IncomingMessage
 } from "node:http";
+
+import type {
+    RequestHandler
+} from "express";
 
 import type {
     ServerToClientEvents,
     ClientToServerEvents,
     InterServerEvents,
-    SocketData,
-    UsuarioSocketAutenticado
+    SocketData
 } from "./SocketTypes.js";
-
-
-export type AutenticarSocket = (
-    token: string
-) => Promise<UsuarioSocketAutenticado | null>;
 
 
 export type AdmissionSocketServer = Server<
@@ -26,10 +25,18 @@ export type AdmissionSocketServer = Server<
     SocketData
 >;
 
+// Información de la sesión que compartimos con Socket.IO.
+type SolicitudConSesion = IncomingMessage & {
+    session?: {
+        usuarioId?: number;
+        rol?: string;
+    };
+};
+
 
 export function configurarSocketIO(
     httpServer: HttpServer,
-    autenticarSocket: AutenticarSocket
+    sessionMiddleware: RequestHandler
 ): AdmissionSocketServer {
 
     const io = new Server<
@@ -40,76 +47,66 @@ export function configurarSocketIO(
     >(httpServer, {
 
         cors: {
-
             origin: process.env.FRONTEND_URL ?? "http://localhost:5173",
-
             methods: ["GET", "POST"],
-
             credentials: true
-
         }
 
     });
 
 
-    // 1. Autenticar cada conexión
+    // 1. Compartir la sesión de Express con Socket.IO.
+    // Se utiliza exactamente el mismo middleware
+    // que utiliza el servidor HTTP.
+    io.engine.use(
+        sessionMiddleware as unknown as Parameters<typeof io.engine.use>[0]
+    );
+
+
+    // 2. Comprobar que el usuario tenga una sesión válida.
     io.use((socket, next) => {
 
-        const token = socket.handshake.auth?.token;
+        const solicitud = socket.request as SolicitudConSesion;
 
-        if (typeof token !== "string" || token.length === 0) {
+        const sesion = solicitud.session;
+
+        const usuarioId = sesion?.usuarioId;
+
+        const rol = sesion?.rol;
+
+
+        if (
+            typeof usuarioId !== "number" ||
+            !Number.isSafeInteger(usuarioId) ||
+            usuarioId <= 0 ||
+            typeof rol !== "string" ||
+            rol.trim().length === 0
+        ) {
 
             return next(
-                new Error("No se proporcionó un token de autenticación.")
+                new Error("Debes iniciar sesión para conectarte.")
             );
 
         }
 
 
-        void autenticarSocket(token)
+        // Guardar solamente información obtenida
+        // de la sesión validada por el backend.
+        socket.data.usuario = {
 
-            .then(usuario => {
+            id: usuarioId,
 
-                if (
-                    !usuario ||
-                    !Number.isSafeInteger(usuario.id) ||
-                    usuario.id <= 0
-                ) {
+            rol: rol.trim().toLowerCase()
 
-                    return next(
-                        new Error("El usuario no está autorizado.")
-                    );
-
-                }
+        };
 
 
-                // Guardar la información verificada
-                // por el backend
-                socket.data.usuario = {
-
-                    ...usuario,
-
-                    rol: usuario.rol.trim().toLowerCase()
-
-                };
-
-
-                next();
-
-            })
-
-            .catch(() => {
-
-                next(
-                    new Error("No se pudo validar la autenticación.")
-                );
-
-            });
+        next();
 
     });
 
 
-    // 2. Asignar a cada usuario sus salas correspondientes
+    // 3. Asignar los usuarios a sus salas.
     io.on("connection", socket => {
 
         const usuario = socket.data.usuario;
@@ -119,11 +116,11 @@ export function configurarSocketIO(
         );
 
 
-        // Sala individual del usuario
+        // Sala individual del usuario.
         socket.join(`usuario:${usuario.id}`);
 
 
-        // Recepcionistas
+        // Sala de recepcionistas.
         if (usuario.rol === "recepcionista") {
 
             socket.join("rol:recepcionista");
@@ -131,20 +128,10 @@ export function configurarSocketIO(
         }
 
 
-        // Médicos
+        // Sala del consultorio médico.
         if (usuario.rol === "medico") {
 
-            // Consultorio correspondiente al médico
             socket.join(`consultorio:${usuario.id}`);
-
-
-            // Solamente médicos disponibles para guardia
-            // reciben alertas de riesgo vital
-            if (usuario.disponibleParaGuardia === true) {
-
-                socket.join("medicos:guardia-disponibles");
-
-            }
 
         }
 
@@ -152,7 +139,7 @@ export function configurarSocketIO(
         socket.on("disconnect", () => {
 
             console.log(
-                `Usuario ${usuario.id} desconectado`
+                `Usuario ${usuario.id} desconectado de Socket.IO`
             );
 
         });
