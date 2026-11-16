@@ -2,7 +2,7 @@
 export interface DatosAdministracionMedicacion {
   idPaciente: number;
   idInsumo: number;
-  cantidad: number;
+  cantidadTotalTratamiento: number;
   estado: string;
 }
 

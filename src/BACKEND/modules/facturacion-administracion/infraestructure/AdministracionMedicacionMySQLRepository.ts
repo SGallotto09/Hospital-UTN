@@ -21,7 +21,7 @@ export class AdministracionMedicacionMySQLRepository
       `SELECT
         im.id_paciente AS idPaciente,
         im.id_insumo AS idInsumo,
-        im.cantidad AS cantidad,
+        im.cantidad AS cantidadTotalTratamiento,
         am.estado AS estado
       FROM administracion_medicacion am
       INNER JOIN indicacion_medica im
@@ -45,7 +45,7 @@ export class AdministracionMedicacionMySQLRepository
     return {
       idPaciente: Number(fila.idPaciente),
       idInsumo: Number(fila.idInsumo),
-      cantidad: Number(fila.cantidad),
+      cantidadTotalTratamiento: Number(fila.cantidadTotalTratamiento),
       estado: String(fila.estado)
     };
   }
