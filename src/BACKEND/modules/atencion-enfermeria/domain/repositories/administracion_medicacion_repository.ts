@@ -8,8 +8,9 @@ export interface AdministracionMedicacionRepository {
         id_indicacion_medica: number,
         id_enfermero: number,
         fecha_hora: Date,
-        horario_programado: Date
-    ): Promise<void>;
+        horario_programado: Date,
+        cantidad_administrada?: number
+    ): Promise<number>;
 
     obtenerDatosIndicacion(
         id_indicacion_medica: number

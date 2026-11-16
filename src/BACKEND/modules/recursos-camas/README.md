@@ -45,6 +45,18 @@ SolicitudAsignacion. Las entidades se utilizan cuando hay reglas de dominio que 
 
 ## HU 3.1: consumo de inventario
 
+Integración actualizada con Enfermería 7342332: su vista envía cantidad_administrada
+en unidades enteras positivas, que deben coincidir con la cantidad indicada. Se valida
+en Vue, controlador y repositorio con la indicación bloqueada. Para clientes anteriores
+el campo es opcional; al omitirlo se utiliza la cantidad indicada. La respuesta incluye
+idAdministracionMedicacion y, cuando se envió, cantidadAdministrada. Se conserva la
+persistencia de consumos y no se utiliza EventEmitter para descontar inventario.
+
+Se incorporaron Protocolos y las vistas actuales de Enfermería conservando Alertas,
+Admisión, Historia Clínica y Recursos y Camas. Los Builders mantienen sus reglas.
+El repositorio de protocolos conserva la persistencia original con limpieza compensatoria;
+la creación de protocolo y tareas no constituye una transacción única.
+
 Integración real de backend con Atención y Enfermería, incorporada selectivamente
  desde origin/feature/backend-enfermeria (8800d76), sin su servidor independiente.
 La tabla existente consumos_medicacion debe tener id_administracion como PK,
@@ -181,7 +193,8 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
 
 ## Verificación
 
-Resultado actual del módulo: **366 pruebas aprobadas, sin omisiones** (20 archivos).
+Resultado actual del módulo: **379 pruebas aprobadas, sin omisiones** (20 archivos).
+Enfermería: **13 pruebas aprobadas** de protocolos y vista de medicación (2 archivos).
 TypeScript del módulo, frontend y servidor comprobado. Concurrencia MySQL real pendiente.
 ESLint global detecta una variable sin uso preexistente en Atención y Enfermería; no se modifica.
 

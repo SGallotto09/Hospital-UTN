@@ -31,6 +31,14 @@ async administrar(req: Request, res: Response): Promise<void> {
         const id_indicacion_medica = Number(req.body.id_indicacion_medica);
         const id_enfermero = Number(req.body.id_enfermero);
         const horario_programado = new Date(req.body.horario_programado);
+        const cantidad_administrada = req.body.cantidad_administrada;
+
+        if (cantidad_administrada !== undefined &&
+            (typeof cantidad_administrada !== 'number' ||
+             !Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0)) {
+            res.status(400).json({ mensaje: 'La cantidad administrada debe ser un entero positivo' });
+            return;
+        }
 
         if (
             !Number.isInteger(id_indicacion_medica) ||
@@ -54,14 +62,17 @@ async administrar(req: Request, res: Response): Promise<void> {
             return;
         }
 
-        await this.administracion_medicacion.ejecutar(
+        const idAdministracionMedicacion = await this.administracion_medicacion.ejecutar(
             id_indicacion_medica,
             id_enfermero,
-            horario_programado
+            horario_programado,
+            cantidad_administrada
         );
 
         res.status(200).json({
-            mensaje: 'Medicación registrada. La actualización del inventario se procesará automáticamente.'
+            mensaje: 'Medicación registrada. La actualización del inventario se procesará automáticamente.',
+            idAdministracionMedicacion,
+            cantidadAdministrada: cantidad_administrada
         });
 
     } catch (error) {

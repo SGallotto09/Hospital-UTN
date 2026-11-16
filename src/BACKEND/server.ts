@@ -30,6 +30,10 @@ import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from "./mod
 import { crearProveedorTransacciones } from "./modules/recursos-camas/infraestructure/database/ContratosMysql.js";
 import { crearPacienteGatewayAdmision } from "./modules/recursos-camas/infraestructure/crearPacienteGatewayAdmision.js";
 import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
+import signoVitalRoutes from "./modules/atencion-enfermeria/infraestructure/api/signos-vitales/signo_vital_routes.js";
+import pacienteInternadoRoutes from "./modules/atencion-enfermeria/infraestructure/api/pacientes-internados/paciente_internado_routes.js";
+import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/dashboard/dashboard_routes.js";
+import protocoloAtencionRoutes from "./modules/atencion-enfermeria/infraestructure/api/protocolos/protocolo_atencion_routes.js";
 import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
 import { iniciarProcesadorConsumos } from "./modules/recursos-camas/infraestructure/procesarConsumosPendientes.js";
 
@@ -98,6 +102,10 @@ const transacciones = crearProveedorTransacciones(database);
 const registroConsumos = crearRegistroConsumosMysql();
 
 app.use("/api/administracion-medicacion", verificarSesion, administracionMedicacionRoutes);
+app.use("/api/signos-vitales", verificarSesion, signoVitalRoutes);
+app.use("/api/pacientes-internados", verificarSesion, pacienteInternadoRoutes);
+app.use("/api/dashboard", verificarSesion, dashboardRoutes);
+app.use("/api/protocolos", verificarSesion, protocoloAtencionRoutes);
 app.use("/api/recursos-camas", verificarSesion, crearModuloRecursosCamas({
     database,
     obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),

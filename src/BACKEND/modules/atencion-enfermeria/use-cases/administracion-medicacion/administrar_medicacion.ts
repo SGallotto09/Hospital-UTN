@@ -10,8 +10,9 @@ export class AdministrarMedicacion {
     async ejecutar(
         id_indicacion_medica: number,
         id_enfermero: number,
-        horario_programado: Date
-    ): Promise<void> {
+        horario_programado: Date,
+        cantidad_administrada?: number
+    ): Promise<number> {
 
         if (!Number.isInteger(id_indicacion_medica) || id_indicacion_medica <= 0) {
             throw new Error('El ID de la indicación médica no es válido');
@@ -23,6 +24,11 @@ export class AdministrarMedicacion {
 
         if (!(horario_programado instanceof Date) || Number.isNaN(horario_programado.getTime())) {
             throw new Error('El horario programado no es válido');
+        }
+
+        if (cantidad_administrada !== undefined &&
+            (!Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0)) {
+            throw new Error('La cantidad administrada debe ser un entero positivo');
         }
 
         const indicacion = await this.administracion_medicacion_repository.obtenerDatosIndicacion(id_indicacion_medica);
@@ -71,11 +77,12 @@ export class AdministrarMedicacion {
             throw new Error('Esta dosis ya fue administrada');
         }
 
-        await this.administracion_medicacion_repository.administrar(
+        return this.administracion_medicacion_repository.administrar(
             id_indicacion_medica,
             id_enfermero,
             ahora,
-            horario_programado
+            horario_programado,
+            cantidad_administrada
         );
     }
 }

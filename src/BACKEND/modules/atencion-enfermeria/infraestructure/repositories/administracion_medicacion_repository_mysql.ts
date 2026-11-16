@@ -45,9 +45,10 @@ async obtenerTodas(): Promise<IndicacionMedicacion[]> {
         id_indicacion_medica: number,
         id_enfermero: number,
         fecha_hora: Date,
-        horario_programado: Date
-    ): Promise<void> {
-        await this.db.withTransaction(async conexion => {
+        horario_programado: Date,
+        cantidad_administrada?: number
+    ): Promise<number> {
+        return this.db.withTransaction(async conexion => {
             // Serializa las administraciones de una indicación antes de comprobar la dosis.
             const [indicaciones] = await conexion.execute<(RowDataPacket & {
                 id_insumo: number; cantidad: number; id_paciente: number;
@@ -63,6 +64,11 @@ async obtenerTodas(): Promise<IndicacionMedicacion[]> {
             if (!indicacion) throw new Error('No se encontró la indicación médica');
             if (!Number.isSafeInteger(indicacion.cantidad) || indicacion.cantidad <= 0) {
                 throw new Error('La cantidad debe representar unidades positivas de inventario');
+            }
+            if (cantidad_administrada !== undefined &&
+                (!Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0 ||
+                 cantidad_administrada !== indicacion.cantidad)) {
+                throw new Error('La cantidad administrada debe ser entera, positiva y coincidir con la cantidad indicada');
             }
 
             // Revalida el horario con los datos bloqueados, por si cambió la indicación.
@@ -108,6 +114,7 @@ async obtenerTodas(): Promise<IndicacionMedicacion[]> {
                     (id_administracion, id_insumo, cantidad, piso, estado)
                 VALUES (?, ?, ?, ?, 'pendiente')
             `, [resultado.insertId, indicacion.id_insumo, indicacion.cantidad, asignaciones[0]!.piso]);
+            return resultado.insertId;
         });
     }
 

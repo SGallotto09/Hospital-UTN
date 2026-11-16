@@ -7,6 +7,9 @@ import { crearRegistroConsumosMysql } from '../../infraestructure/database/Regis
 import { MysqlInsumoRepository } from '../../infraestructure/repositories/MysqlInsumoRepository.js'
 import { ConsultaMysqlCompartida } from '../../infraestructure/database/ConsultaMysqlCompartida.js'
 import { ProcesarConsumoInsumo } from '../../application/use-cases/ProcesarConsumoInsumo.js'
+import { AdministracionMedicacionController } from '../../../atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_controller.js'
+import { ObtenerMedicaciones } from '../../../atencion-enfermeria/use-cases/administracion-medicacion/obtener_medicaciones.js'
+import type { Request, Response } from 'express'
 
 // Componentes reales con conexiones programadas: no ejecuta escrituras en MySQL.
 const mocks = vi.hoisted(() => ({
@@ -54,7 +57,7 @@ afterEach(() => vi.useRealTimers())
 describe('Enfermería: administración y pendiente atómicos', () => {
   it('bloquea indicación y dosis, toma el piso activo e inserta todo sin descontar stock', async () => {
     responder([indicacion], [], [{ piso: 2 }], { insertId: 20 }, { affectedRows: 1 })
-    await new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario)
+    await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1)).resolves.toBe(20)
     const llamadas = mocks.conexion.execute.mock.calls
     expect(llamadas[0]?.[0]).toContain('FROM indicacion_medica WHERE id = ? FOR UPDATE')
     expect(llamadas[1]?.[0]).toContain('FOR UPDATE')
@@ -108,9 +111,35 @@ describe('Enfermería: administración y pendiente atómicos', () => {
       existeDosisAdministrada: vi.fn().mockResolvedValue(false), administrar: vi.fn(),
     }
     await new AdministrarMedicacion(repo).ejecutar(1, 7, horario)
-    expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario)
+    expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, undefined)
     await expect(new AdministrarMedicacion(repo).ejecutar(1, 7, new Date(horario.getTime() + 3600000)))
       .rejects.toThrow('dosis programada')
+  })
+
+  it.each([0, -1, 1.5, 2, NaN, Infinity])('rechaza cantidad administrada inválida o diferente de la indicada: %s', async cantidad => {
+    responder([indicacion])
+    await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, cantidad))
+      .rejects.toThrow('coincidir con la cantidad indicada')
+    expect(mocks.conexion.execute).toHaveBeenCalledOnce()
+    expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+    expect(mocks.conexion.commit).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 1, 0, -1, 1.5, '1', null])('controlador conserva compatibilidad y valida unidades: %s', async cantidad => {
+    const repo = {
+      obtenerTodas: vi.fn(), obtenerDatosIndicacion: vi.fn().mockResolvedValue(indicacion),
+      existeDosisAdministrada: vi.fn().mockResolvedValue(false), administrar: vi.fn().mockResolvedValue(20),
+    }
+    const controller = new AdministracionMedicacionController(new ObtenerMedicaciones(repo), new AdministrarMedicacion(repo))
+    const req = { body: { id_indicacion_medica: 1, id_enfermero: 7, horario_programado: horario.toISOString(), cantidad_administrada: cantidad } } as Request
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+    await controller.administrar(req, res)
+    const valido = cantidad === undefined || cantidad === 1
+    expect(res.status).toHaveBeenCalledWith(valido ? 200 : 400)
+    if (valido) {
+      expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, cantidad)
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ idAdministracionMedicacion: 20 }))
+    } else expect(repo.administrar).not.toHaveBeenCalled()
   })
 })
 
