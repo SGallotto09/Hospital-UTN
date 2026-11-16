@@ -42,13 +42,12 @@ const router = createRouter({
                     path: "enfermeria/pacientes",
                     name: "enfermeria-pacientes",
                     component: () =>
-                        import("../FRONTEND/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
+                        import("@/FRONTEND/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
                 },
                 {
                     path: "/historia_clinica",
                     name: "historia_clinica",
-                    component: () => 
-                        import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
+                    component: () => import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
                 },
 
                 {
