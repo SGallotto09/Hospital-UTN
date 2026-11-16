@@ -1,12 +1,16 @@
-
 import { createRouter, createWebHistory } from "vue-router";
 
 import LoginView from "../FRONTEND/modules/IAM/views/LoginView.vue";
 import MainLayout from "../FRONTEND/layouts/MainLayout.vue";
+
 import AtenciónEnfermeriaView from "../FRONTEND/modules/atencion-enfermeria/views/AtenciónEnfermeriaView.vue";
 
 import AdmissionLayout from "../FRONTEND/layouts/AdmissionLayout.vue";
 import DashboardView from "@/FRONTEND/modules/admicion-turnos/views/DashboardView.vue";
+import RegistroUsuariosView from "../FRONTEND/modules/IAM/RegistroUsuariosView.vue";
+
+// FACTURACIÓN Y ADMINISTRACIÓN
+import FacturacionView from "../FRONTEND/modules/facturacion-administracion/views/FacturacionView.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -17,53 +21,99 @@ const router = createRouter({
             name: "login",
             component: LoginView
         },
+
         {
             path: "/",
             component: MainLayout,
+
             children: [
                 {
                     path: "",
                     redirect: "/login"
                 },
+
                 {
                     path: "enfermeria",
                     name: "enfermeria",
                     component: AtenciónEnfermeriaView
                 },
+
                 {
                     path: "enfermeria/pacientes",
                     name: "enfermeria-pacientes",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
                 },
+
                 {
                     path: "/historia_clinica",
                     name: "historia_clinica",
                     component: () =>
                         import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
                 },
+
                 {
                     path: "enfermeria/signos-vitales",
                     name: "enfermeria-signos-vitales",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/SignosVitalesView.vue")
                 },
+
                 {
                     path: "enfermeria/medicacion",
                     name: "enfermeria-medicacion",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
+
+                {
+                    path: "enfermeria/alertas",
+                    name: "enfermeria-alertas",
+                    component: () =>
+                        import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
+                },
+
+                // ADMINISTRACIÓN DE USUARIOS
+                {
+                    path: "usuarios/registro",
+                    name: "registro-usuarios",
+                    component: RegistroUsuariosView
+                },
+
+                // FACTURACIÓN Y ADMINISTRACIÓN
+                {
+                    path: "facturacion",
+                    name: "facturacion",
+                    component: FacturacionView
+                },
+
+                // ADMISIÓN Y TURNOS
                 {
                     path: "enfermeria/protocolos",
                     name: "enfermeria-protocolos",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/ProtocolosView.vue")
                 },
+
+                {
+                    path: "recursos-camas",
+                    name: "recursos-camas",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/GestionCamasView.vue")
+                },
+
+                {
+                    path: "recursos-camas/inventario",
+                    name: "recursos-camas-inventario",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/InventarioView.vue")
+                },
+
                 {
                     path: "admisiones",
                     component: AdmissionLayout,
                     redirect: { name: "dashboard-turnos" },
+
                     children: [
                         {
                             path: "dashboard",

@@ -35,7 +35,7 @@ export class MySQLAdmisionUnitOfWork implements IAdmisionUnitOfWork {
     ): Promise<T> {
 
 
-        return this.database.ejecutarTransaccion(
+        return this.database.withTransaction(
             async connection => {
 
                 // 1. Crear los repositorios utilizando

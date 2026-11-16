@@ -35,7 +35,7 @@ async function iniciarSesion() {
 
         password.value = "";
         // Destino provisional hasta que el grupo defina la pantalla inicial.
-        await router.replace("/enfermeria");
+        await router.replace("/recursos-camas");
     } catch {
         mensaje.value = "No se pudo conectar con el sistema. Intentá nuevamente.";
     } finally {
@@ -43,10 +43,6 @@ async function iniciarSesion() {
     }
 }
 
-function recuperarAcceso() {
-mensaje.value =
-    "La recuperación de contraseña estará disponible cuando conectemos el backend.";
-}
 </script>
 
 <template>
@@ -308,21 +304,6 @@ mensaje.value =
                 </svg>
                 </button>
             </div>
-            </div>
-
-            <div class="form-options">
-            <label class="remember-option">
-                <input type="checkbox" disabled title="Opción no disponible" />
-                <span>Recordarme</span>
-            </label>
-
-            <button
-                class="text-button"
-                type="button"
-                @click="recuperarAcceso"
-            >
-                ¿Olvidaste tu contraseña?
-            </button>
             </div>
 
             <p v-if="mensaje" class="feedback-message" role="status">
@@ -795,47 +776,6 @@ width: 19px;
 height: 19px;
 }
 
-.form-options {
-display: flex;
-flex-wrap: wrap;
-align-items: center;
-justify-content: space-between;
-gap: 12px;
-margin: 2px 0 24px;
-}
-
-.remember-option {
-display: inline-flex;
-align-items: center;
-gap: 8px;
-color: #65758c;
-font-size: 11px;
-cursor: pointer;
-}
-
-.remember-option input {
-width: 15px;
-height: 15px;
-margin: 0;
-accent-color: #087ee5;
-cursor: pointer;
-}
-
-.text-button {
-padding: 2px 0;
-border: 0;
-background: transparent;
-color: #0878d9;
-font-size: 11px;
-font-weight: 650;
-cursor: pointer;
-}
-
-.text-button:hover {
-color: #0757a1;
-text-decoration: underline;
-}
-
 .feedback-message {
 margin: -7px 0 17px;
 padding: 11px 12px;
@@ -1074,13 +1014,6 @@ text-align: center;
     font-size: 27px;
 }
 
-.form-options {
-    align-items: flex-start;
-}
-
-.text-button {
-    text-align: right;
-}
 }
 
 @media (min-width: 761px) and (max-height: 800px) {

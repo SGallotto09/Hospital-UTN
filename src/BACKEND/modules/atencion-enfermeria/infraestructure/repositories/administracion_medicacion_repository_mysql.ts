@@ -1,3 +1,4 @@
+import type { ResultSetHeader } from 'mysql2/promise';
 import { Database } from '../../../../database/connectionDB.js';
 
 import type { AdministracionMedicacionRepository } from '../../domain/repositories/administracion_medicacion_repository.js';
@@ -45,12 +46,13 @@ async administrar(
     id_indicacion_medica: number,
     id_enfermero: number,
     fecha_hora: Date,
-    cantidad_administrada: number,
-    horario_programado: Date
+    horario_programado: Date,
+    cantidad_administrada?: number
 ): Promise<number> {
 
-    if (!Number.isFinite(cantidad_administrada) || cantidad_administrada <= 0) {
-        throw new Error('La cantidad administrada debe ser mayor a cero.');
+    if (cantidad_administrada !== undefined &&
+        (!Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0)) {
+        throw new Error('La cantidad administrada debe ser un entero positivo');
     }
 
     if (await this.existeDosisAdministrada(id_indicacion_medica, horario_programado)) {
@@ -60,7 +62,8 @@ async administrar(
     const sqlBuscar = `
         SELECT
             im.id_insumo,
-            i.stock
+            im.cantidad,
+            im.id_paciente
         FROM indicacion_medica im
         INNER JOIN insumos i ON i.id = im.id_insumo
         WHERE im.id = ?
@@ -72,7 +75,8 @@ async administrar(
 
     const indicaciones = filas as {
         id_insumo: number;
-        stock: number;
+        cantidad: number;
+        id_paciente: number;
     }[];
 
     if (indicaciones.length === 0) {
@@ -80,18 +84,37 @@ async administrar(
     }
 
     const indicacion = indicaciones[0];
+    const cantidad_realmente_administrada = cantidad_administrada ?? indicacion.cantidad;
+
+    if (!Number.isSafeInteger(indicacion.cantidad) || indicacion.cantidad <= 0 ||
+        cantidad_realmente_administrada !== indicacion.cantidad) {
+        throw new Error('La cantidad administrada debe coincidir con la cantidad indicada');
+    }
+
+    const [filas_asignacion] = await this.db.query(`
+        SELECT c.piso
+        FROM asignaciones_camas ac
+        INNER JOIN camas c ON c.id = ac.id_cama
+        WHERE ac.id_paciente = ? AND ac.fecha_egreso IS NULL
+        ORDER BY ac.fecha_ingreso DESC, ac.id DESC
+    `, [indicacion.id_paciente]);
+    const asignaciones = filas_asignacion as { piso: number }[];
+    if (asignaciones.length !== 1 || !Number.isSafeInteger(asignaciones[0]?.piso)) {
+        throw new Error('El paciente debe tener una única cama activa con piso válido');
+    }
+    const piso = asignaciones[0].piso;
 
     const sqlDescontar = `
         UPDATE insumos
         SET stock = stock - ?
-        WHERE id = ?
-        AND stock >= ?
+        WHERE id = ? AND piso = ? AND stock >= ?
     `;
 
     const [resultado] = await this.db.query(sqlDescontar, [
-        cantidad_administrada,
+        cantidad_realmente_administrada,
         indicacion.id_insumo,
-        cantidad_administrada
+        piso,
+        cantidad_realmente_administrada
     ]);
 
     const actualizacion = resultado as { affectedRows: number };
@@ -106,24 +129,59 @@ async administrar(
         VALUES (?, ?, ?, ?)
     `;
 
+    let id_administracion_medicacion: number | undefined;
     try {
-        const [resultado_insertar]: any = await this.db.query(sqlInsertar, [
+        const [resultado_insertar] = await this.db.query(sqlInsertar, [
             id_indicacion_medica,
             'Administrada',
             id_enfermero,
             fecha_hora
         ]);
+        id_administracion_medicacion =
+            (resultado_insertar as ResultSetHeader).insertId;
+        if (!Number.isSafeInteger(id_administracion_medicacion) || id_administracion_medicacion <= 0) {
+            throw new Error('MySQL no devolvió un ID válido para la administración');
+        }
 
-        return resultado_insertar.insertId;
+        // El stock ya se descontó; el estado procesado evita un segundo descuento
+        // del worker de Recursos-Camas y deja el consumo disponible para Facturación.
+        await this.db.query(`
+            INSERT INTO consumos_medicacion
+                (id_administracion, id_insumo, cantidad, piso, estado)
+            VALUES (?, ?, ?, ?, 'procesado')
+        `, [id_administracion_medicacion, indicacion.id_insumo, cantidad_realmente_administrada, piso]);
+
+        return id_administracion_medicacion;
     } catch (error) {
+        if (id_administracion_medicacion !== undefined) {
+            try {
+                await this.db.query(
+                    'DELETE FROM consumos_medicacion WHERE id_administracion = ?',
+                    [id_administracion_medicacion]
+                );
+            } catch (error_limpieza_consumo) {
+                console.error('No se pudo limpiar el consumo de medicación incompleto:', error_limpieza_consumo);
+            }
+            try {
+                await this.db.query(
+                    'DELETE FROM administracion_medicacion WHERE id = ?',
+                    [id_administracion_medicacion]
+                );
+            } catch (error_limpieza_administracion) {
+                console.error('No se pudo limpiar la administración incompleta:', error_limpieza_administracion);
+            }
+        }
+
         try {
-            await this.db.query(
-                `UPDATE insumos SET stock = stock + ? WHERE id = ?`,
-                [cantidad_administrada, indicacion.id_insumo]
-            );
+            const [resultado_compensacion] = await this.db.query(`
+                UPDATE insumos SET stock = stock + ? WHERE id = ? AND piso = ?
+            `, [cantidad_realmente_administrada, indicacion.id_insumo, piso]);
+            if ((resultado_compensacion as { affectedRows: number }).affectedRows !== 1) {
+                console.error('La compensación del stock no afectó una fila; se requiere revisión manual.');
+            }
         } catch (error_compensacion) {
             console.error(
-                'Falló el INSERT de administración y también la compensación del stock:',
+                'Falló el registro de administración/consumo y también la compensación del stock:',
                 error_compensacion
             );
         }
@@ -133,12 +191,13 @@ async administrar(
 }
 
     
-    async obtenerDatosIndicacion(id_indicacion_medica: number): Promise<{fecha: string; hora_inicio: string; frecuencia_horas: number;} | null> {
+    async obtenerDatosIndicacion(id_indicacion_medica: number): Promise<{fecha: string; hora_inicio: string; frecuencia_horas: number; cantidad: number;} | null> {
         const sql = `
             SELECT
                 DATE_FORMAT(fecha, '%Y-%m-%d') AS fecha,
                 TIME_FORMAT(hora_incio, '%H:%i:%s') AS hora_inicio,
-                frecuencia_hora AS frecuencia_horas
+                frecuencia_hora AS frecuencia_horas,
+                cantidad
             FROM indicacion_medica
             WHERE id = ?
         `;
@@ -149,6 +208,7 @@ async administrar(
             fecha: string;
             hora_inicio: string;
             frecuencia_horas: number;
+            cantidad: number;
         }[];
 
         if (indicaciones.length === 0) {

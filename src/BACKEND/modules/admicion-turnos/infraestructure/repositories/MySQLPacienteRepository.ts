@@ -108,6 +108,31 @@ export class MySQLPacienteRepository implements IPacienteRepository {
     }
 
 
+    // Obtener todos los pacientes registrados
+    async listarTodos(): Promise<Paciente[]> {
+
+        const sql = `
+            SELECT
+                id,
+                nombre,
+                apellido,
+                dni,
+                DATE_FORMAT(fecha_nacimiento, '%Y-%m-%d') AS fecha_nacimiento,
+                genero,
+                telefono,
+                email,
+                obra_social
+            FROM pacientes
+            ORDER BY apellido ASC, nombre ASC
+        `;
+
+        const [resultado] = await this.database.query(sql);
+
+        const filas = resultado as PacienteRow[];
+
+        return filas.map((fila) => this.mapearPaciente(fila));
+    }
+
     // Registrar un nuevo paciente
     async guardar(paciente: Paciente): Promise<Paciente> {
 

@@ -1,0 +1,17 @@
+{
+  "extends": "../../../../tsconfig.app.json",
+  "include": [
+    "../../types/**/*.d.ts",
+    "./**/*.ts",
+    "../../../FRONTEND/modules/recursos-camas/**/*.ts",
+    "../../../FRONTEND/modules/recursos-camas/**/*.vue"
+  ],
+  "exclude": ["./node_modules"],
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "types": ["node", "jsdom"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "noEmit": true
+  }
+}

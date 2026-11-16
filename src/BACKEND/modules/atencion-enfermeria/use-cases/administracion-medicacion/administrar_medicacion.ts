@@ -12,7 +12,7 @@ export class AdministrarMedicacion {
         id_indicacion_medica: number,
         id_enfermero: number,
         horario_programado: Date,
-        cantidad_administrada: number
+        cantidad_administrada?: number
     ): Promise<number> {
 
         if (!Number.isInteger(id_indicacion_medica) || id_indicacion_medica <= 0) {
@@ -27,8 +27,9 @@ export class AdministrarMedicacion {
             throw new Error('El horario programado no es válido');
         }
 
-        if (!Number.isFinite(cantidad_administrada) || cantidad_administrada <= 0) {
-            throw new Error('La cantidad administrada debe ser mayor a cero');
+        if (cantidad_administrada !== undefined &&
+            (!Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0)) {
+            throw new Error('La cantidad administrada debe ser un entero positivo');
         }
 
         const indicacion =
@@ -38,6 +39,15 @@ export class AdministrarMedicacion {
 
         if (indicacion === null) {
             throw new Error('No se encontró la indicación médica');
+        }
+
+        if (!Number.isSafeInteger(indicacion.cantidad) || indicacion.cantidad <= 0) {
+            throw new Error('La cantidad indicada debe ser un entero positivo');
+        }
+
+        const cantidad_realmente_administrada = cantidad_administrada ?? indicacion.cantidad;
+        if (cantidad_realmente_administrada !== indicacion.cantidad) {
+            throw new Error('La cantidad administrada debe coincidir con la cantidad indicada');
         }
 
         const inicio = new Date(`${indicacion.fecha}T${indicacion.hora_inicio}`);
@@ -83,14 +93,14 @@ export class AdministrarMedicacion {
                 id_indicacion_medica,
                 id_enfermero,
                 ahora,
-                cantidad_administrada,
-                horario_programado
+                horario_programado,
+                cantidad_realmente_administrada
             );
 
-            event_bus.emitir_medicacion_administrada({
-                idAdministracionMedicacion: id_administracion_medicacion,
-                cantidadAdministrada: cantidad_administrada
-            });
+        event_bus.emitir_medicacion_administrada({
+            idAdministracionMedicacion: id_administracion_medicacion,
+            cantidadAdministrada: cantidad_realmente_administrada
+        });
 
         return id_administracion_medicacion;
     }

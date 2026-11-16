@@ -9,5 +9,3 @@ export class ObtenerSignosVitales{
         return this.signoVitalRepository.obtenerTodos();
     }
 }
-
- 

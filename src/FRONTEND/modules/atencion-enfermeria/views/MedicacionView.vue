@@ -63,6 +63,10 @@ async function cargarMedicaciones(): Promise<void> {
         }
 
         medicaciones.value = await respuesta.json();
+        for (const medicacion of medicaciones.value) {
+            const clave = obtenerClave(medicacion);
+            cantidades_administradas.value[clave] ??= String(medicacion.cantidad);
+        }
     } catch (error) {
         mensaje.value = error instanceof Error
             ? error.message
@@ -89,10 +93,11 @@ async function administrarMedicacion(
     );
 
     if (
-        !Number.isFinite(cantidad_administrada) ||
-        cantidad_administrada <= 0
+        !Number.isSafeInteger(cantidad_administrada) ||
+        cantidad_administrada <= 0 ||
+        cantidad_administrada !== medicacion.cantidad
     ) {
-        mensaje.value = "Ingresá una cantidad administrada válida";
+        mensaje.value = "La cantidad debe ser entera, positiva e igual a la indicada";
         return;
     }
 
@@ -214,8 +219,9 @@ onMounted(cargarMedicaciones);
                         :id="`cantidad-${obtenerClave(medicacion)}`"
                         v-model="cantidades_administradas[obtenerClave(medicacion)]"
                         type="number"
-                        min="0.01"
-                        step="any"
+                        min="1"
+                        :max="medicacion.cantidad"
+                        step="1"
                         placeholder="Ingresar cantidad"
                         :disabled="administrando !== null"
                     />

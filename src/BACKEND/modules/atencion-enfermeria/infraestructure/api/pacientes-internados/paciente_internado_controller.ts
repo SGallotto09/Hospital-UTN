@@ -9,7 +9,7 @@ export class PacienteInternadoController {
     async obtenerTodos(req: Request, res: Response): Promise<void> {
         try {
             const buscar = typeof req.query.buscar === 'string' ? req.query.buscar : undefined;
-            
+
             const pacientes = await this.obtenerPacientesInternados.ejecutar(buscar);
             res.status(200).json(pacientes);
         } catch (error) {

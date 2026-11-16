@@ -37,7 +37,8 @@ export class RegistrarUsuario {
             "Administrador",
             "Médico",
             "Enfermero",
-            "Recepcionista"
+            "Recepcionista",
+            "Limpieza"
         ];
 
         if (!rolesPermitidos.includes(datos.rol)) {

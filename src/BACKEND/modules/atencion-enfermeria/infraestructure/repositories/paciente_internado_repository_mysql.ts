@@ -7,7 +7,7 @@ export class PacienteInternadoRepositoryMysql implements PacienteInternadoReposi
 
     async obtenerInternados(buscar?: string): Promise<Omit<PacienteInternado, 'estado'>[]>{
         let sql = `
-            SELECT 
+            SELECT
                 p.id,
                 p.nombre,
                 p.apellido,
@@ -29,7 +29,7 @@ export class PacienteInternadoRepositoryMysql implements PacienteInternadoReposi
                 GROUP BY id_paciente
             ) sv_ultimo
                 ON sv_ultimo.id_paciente = p.id
-            
+
             LEFT JOIN signos_vitales sv
                 ON sv.id = sv_ultimo.ultimo_id
 
@@ -47,14 +47,14 @@ export class PacienteInternadoRepositoryMysql implements PacienteInternadoReposi
                     OR CONCAT(p.nombre, ' ', p.apellido) LIKE ?
                     OR CAST(c.habitacion AS CHAR) LIKE ?
                 )
-                
+
             `;
             const termino = `%${buscar.trim()}%`;
 
             valores.push(termino, termino, termino, termino);
         }
         const [filas] =await this.db.query(sql, valores);
-        
+
         return filas as Omit<PacienteInternado, 'estado'>[];
     }
 }

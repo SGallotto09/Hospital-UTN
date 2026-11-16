@@ -2,7 +2,7 @@ import { SignoVitalRepositoryMySQL } from '../../infraestructure/repositories/si
 
 async function main() {
     const repositorio = new SignoVitalRepositoryMySQL();
-    
+
     try{
         const signos = await repositorio.obtenerPorPaciente(1);
         console.log('Signos vitales del paciente 1: ');

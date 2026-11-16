@@ -41,7 +41,7 @@ export class Triaje {
 
     private constructor(props: TriajeProps) {
 
-        this.validarId(props.id, "id");
+        this.validarId(props.id, "id", true);
         this.validarId(props.idPaciente, "idPaciente");
         this.validarId(props.idEnfermero, "idEnfermero");
 
@@ -71,6 +71,14 @@ export class Triaje {
     }
 
     static reconstituir(props: TriajeProps): Triaje {
+        if (
+            !Number.isSafeInteger(props.id) ||
+            props.id === null ||
+            props.id <= 0
+        ) {
+            throw new Error("No se puede reconstruir un triaje sin un ID válido.");
+        }
+
         return new Triaje(props);
     }
 
@@ -108,14 +116,24 @@ export class Triaje {
         this._estado = "ATENDIDO";
     }
 
-    private validarId(id: number | null, campo: string): void {
+    private validarId(
+        id: number | null,
+        campo: string,
+        permitirNull: boolean = false
+    ): void {
+
+        if (id === null && permitirNull) {
+            return;
+        }
 
         if (
             id === null ||
             !Number.isSafeInteger(id) ||
             id <= 0
         ) {
-            throw new Error(`El campo ${campo} debe ser un ID válido.`);
+            throw new Error(
+                `El campo ${campo} debe ser un ID válido.`
+            );
         }
     }
 
