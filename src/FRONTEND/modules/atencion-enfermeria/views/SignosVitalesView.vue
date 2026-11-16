@@ -23,7 +23,6 @@ interface SignoVital {
 const pacientes = ref<Paciente[]>([]);
 const pacienteSeleccionado = ref<number>(0);
 
-const idEnfermero = ref("");
 const presionArterial = ref("");
 const frecuenciaCardiaca = ref("");
 const temperatura = ref("");
@@ -34,10 +33,15 @@ const mensaje = ref("");
 const alerta = ref(false);
 const cargando = ref(false);
 
+const api_base = "/api";
+
 async function cargarPacientes() {
     try {
         const respuesta = await fetch(
-            "http://localhost:3001/api/pacientes-internados"
+            `${api_base}/pacientes-internados`,
+            {
+                credentials: "include"
+            }
         );
 
         if (!respuesta.ok) {
@@ -52,7 +56,6 @@ async function cargarPacientes() {
             pacienteSeleccionado.value = primerPaciente.id;
             await cargarSignosVitales();
         }
-        
     } catch {
         mensaje.value = "No se pudieron cargar los pacientes";
     }
@@ -63,7 +66,10 @@ async function cargarSignosVitales() {
 
     try {
         const respuesta = await fetch(
-            `http://localhost:3001/api/signos-vitales/paciente/${pacienteSeleccionado.value}`
+            `${api_base}/signos-vitales/paciente/${pacienteSeleccionado.value}`,
+            {
+                credentials: "include"
+            }
         );
 
         if (!respuesta.ok) {
@@ -82,7 +88,6 @@ async function registrarControl() {
 
     if (
         pacienteSeleccionado.value === 0 ||
-        !idEnfermero.value ||
         !presionArterial.value ||
         !frecuenciaCardiaca.value ||
         !temperatura.value
@@ -95,15 +100,15 @@ async function registrarControl() {
 
     try {
         const respuesta = await fetch(
-            "http://localhost:3001/api/signos-vitales",
+            `${api_base}/signos-vitales`,
             {
                 method: "POST",
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
                     id_paciente: pacienteSeleccionado.value,
-                    id_enfermero: Number(idEnfermero.value),
                     presion_arterial: presionArterial.value,
                     frecuencia_cardiaca: Number(frecuenciaCardiaca.value),
                     temperatura: Number(temperatura.value)
@@ -114,11 +119,13 @@ async function registrarControl() {
         const resultado = await respuesta.json();
 
         if (!respuesta.ok) {
-            throw new Error(resultado.mensaje);
+            throw new Error(resultado.mensaje || "Error al registrar el control");
         }
 
         alerta.value = resultado.alerta;
-        mensaje.value = resultado.mensaje;
+        mensaje.value = resultado.alerta
+            ? resultado.mensaje
+            : "Control registrado correctamente";
 
         presionArterial.value = "";
         frecuenciaCardiaca.value = "";
@@ -139,6 +146,7 @@ onMounted(() => {
     cargarPacientes();
 });
 </script>
+
 
 <template>
     <div class="page">
@@ -191,16 +199,6 @@ onMounted(() => {
                             {{ paciente.nombre }} {{ paciente.apellido }}
                         </option>
                     </select>
-                </div>
-
-                <div class="form-group">
-                    <label>ID del enfermero</label>
-
-                    <input
-                        v-model="idEnfermero"
-                        type="number"
-                        placeholder="Ingresar ID del enfermero"
-                    />
                 </div>
 
                 <div class="vital-fields">

@@ -19,13 +19,17 @@ const buscador = ref("");
 const cargando = ref(false);
 const error = ref("");
 
+
 async function cargarPacientes() {
     cargando.value = true;
     error.value = "";
 
     try {
         const respuesta = await fetch(
-            `http://localhost:3001/api/pacientes-internados?buscar=${buscador.value}`
+            `/api/pacientes-internados?buscar=${encodeURIComponent(buscador.value)}`,
+            {
+                credentials: "include"
+            }
         );
 
         if (!respuesta.ok) {

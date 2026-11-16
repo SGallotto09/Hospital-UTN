@@ -1,3 +1,4 @@
+
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import EnfermeriaNav from "../components/EnfermeriaNav.vue";
@@ -14,7 +15,7 @@ interface PacienteDashboard {
     fecha_hora: string | null;
 }
 
-const API_URL = "http://localhost:3001";
+const API_URL = "/api/dashboard";
 
 const pacientes = ref<PacienteDashboard[]>([]);
 const mensaje = ref("");
@@ -26,7 +27,6 @@ const mostrar_modal_control = ref(false);
 
 const nuevo_control = ref({
     paciente_id: "",
-    id_enfermero: "",
     presion_arterial: "",
     frecuencia_cardiaca: "",
     temperatura: ""
@@ -62,13 +62,16 @@ async function cargar_pacientes() {
     mensaje.value = "";
 
     try {
-        const respuesta = await fetch(`${API_URL}/api/dashboard`);
+        const respuesta = await fetch(API_URL, {
+            credentials: "include"
+        });
 
         if (!respuesta.ok) {
             throw new Error("No se pudieron cargar los datos del panel");
         }
 
         pacientes.value = await respuesta.json() as PacienteDashboard[];
+
     } catch (error) {
         mensaje.value = error instanceof Error
             ? error.message
@@ -81,7 +84,6 @@ async function cargar_pacientes() {
 function abrir_modal_control(paciente?: PacienteDashboard) {
     nuevo_control.value = {
         paciente_id: paciente ? String(paciente.id) : "",
-        id_enfermero: "",
         presion_arterial: "",
         frecuencia_cardiaca: "",
         temperatura: ""
@@ -99,14 +101,12 @@ async function registrar_control() {
     mensaje.value = "";
 
     const paciente_id = Number(nuevo_control.value.paciente_id);
-    const id_enfermero = Number(nuevo_control.value.id_enfermero);
     const frecuencia_cardiaca = Number(nuevo_control.value.frecuencia_cardiaca);
     const temperatura = Number(nuevo_control.value.temperatura);
     const presion_arterial = nuevo_control.value.presion_arterial.trim();
 
     if (
         !paciente_id ||
-        !id_enfermero ||
         !presion_arterial ||
         !nuevo_control.value.frecuencia_cardiaca ||
         !nuevo_control.value.temperatura
@@ -117,7 +117,6 @@ async function registrar_control() {
 
     if (
         !Number.isInteger(paciente_id) ||
-        !Number.isInteger(id_enfermero) ||
         !Number.isFinite(frecuencia_cardiaca) ||
         !Number.isFinite(temperatura) ||
         frecuencia_cardiaca <= 0 ||
@@ -130,14 +129,14 @@ async function registrar_control() {
     guardando.value = true;
 
     try {
-        const respuesta = await fetch(`${API_URL}/api/signos-vitales`, {
+        const respuesta = await fetch("/api/signos-vitales", {
             method: "POST",
+            credentials: "include",
             headers: {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
                 id_paciente: paciente_id,
-                id_enfermero,
                 presion_arterial,
                 frecuencia_cardiaca,
                 temperatura
@@ -187,6 +186,7 @@ function registrar_signos_del_paciente() {
 
 onMounted(cargar_pacientes);
 </script>
+
 
 <template>
     <EnfermeriaNav />
@@ -525,17 +525,6 @@ onMounted(cargar_pacientes);
                                 - Habitación {{ paciente.habitacion }}
                             </option>
                         </select>
-                    </div>
-
-                    <div class="control-form-section">
-                        <label for="id_enfermero">ID del enfermero</label>
-                        <input
-                            id="id_enfermero"
-                            v-model="nuevo_control.id_enfermero"
-                            type="number"
-                            min="1"
-                            required
-                        />
                     </div>
 
                     <div class="control-form-section">
