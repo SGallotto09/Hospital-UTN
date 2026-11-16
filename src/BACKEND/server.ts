@@ -21,6 +21,7 @@ import { CargoFacturacionMySQLRepository } from "./modules/facturacion-administr
 import { RegistrarCargoFacturacion } from "./modules/facturacion-administracion/use-cases/RegistrarCargoFacturacion.js";
 import { FacturarPrestacion } from "./modules/facturacion-administracion/use-cases/FacturarPrestacion.js";
 import { RegistroPrestacionMySQLRepository } from "./modules/facturacion-administracion/infraestructure/RegistroPrestacionMySQLRepository.js";
+import { iniciarFacturacionMedicacion } from "./modules/facturacion-administracion/infraestructure/IniciarFacturacionMedicacion.js";
 
 
 for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
@@ -177,6 +178,9 @@ if (!await database.probarConexion()) {
     await database.cerrar();
     throw new Error("No se pudo iniciar el servidor: MySQL no está disponible");
 }
+
+// ACTIVAR FACTURACIÓN AUTOMÁTICA DE MEDICAMENTOS
+iniciarFacturacionMedicacion();
 
 const servidor = app.listen(PORT, () => {
     console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
