@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { protegerRutas } from "./autenticacion";
 
 import LoginView from "../FRONTEND/modules/IAM/views/LoginView.vue";
 import MainLayout from "../FRONTEND/layouts/MainLayout.vue";
@@ -46,7 +47,9 @@ const router = createRouter({
                 },
 
                 {
-                    path: "/historia_clinica",
+                    path: "historia-clinica",
+                    alias: "/historia_clinica",
+                    meta: { roles: ["Médico", "Enfermero", "Administrador"] },
                     name: "historia_clinica",
                     component: () =>
                         import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
@@ -77,6 +80,7 @@ const router = createRouter({
                 {
                     path: "usuarios/registro",
                     name: "registro-usuarios",
+                    meta: { roles: ["Administrador"] },
                     component: RegistroUsuariosView
                 },
 
@@ -84,6 +88,7 @@ const router = createRouter({
                 {
                     path: "facturacion",
                     name: "facturacion",
+                    meta: { roles: ["Administrador"] },
                     component: FacturacionView
                 },
 
@@ -91,6 +96,7 @@ const router = createRouter({
                 {
                     path: "enfermeria/protocolos",
                     name: "enfermeria-protocolos",
+                    meta: { roles: ["Enfermero"] },
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/ProtocolosView.vue")
                 },
@@ -105,6 +111,7 @@ const router = createRouter({
                 {
                     path: "recursos-camas/inventario",
                     name: "recursos-camas-inventario",
+                    meta: { roles: ["Administrador", "Enfermero"] },
                     component: () =>
                         import("@/FRONTEND/modules/recursos-camas/views/InventarioView.vue")
                 },
@@ -153,8 +160,11 @@ const router = createRouter({
                     ]
                 }
             ]
-        }
+        },
+        { path: "/:pathMatch(.*)*", redirect: "/login" }
     ]
 });
+
+protegerRutas(router);
 
 export default router;

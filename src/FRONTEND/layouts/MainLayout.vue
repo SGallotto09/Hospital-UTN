@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { invalidarAcceso } from "../../router/autenticacion";
 
 const router = useRouter();
 const cerrandoSesion = ref(false);
@@ -14,7 +15,7 @@ async function cerrarSesion() {
     try {
         const respuesta = await fetch("/api/auth/logout", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
         });
 
         if (respuesta.status !== 200) {
@@ -22,6 +23,7 @@ async function cerrarSesion() {
             return;
         }
 
+        invalidarAcceso();
         await router.replace("/login");
     } catch {
         errorSalida.value = "No se pudo conectar para cerrar sesión. Intentá nuevamente.";
