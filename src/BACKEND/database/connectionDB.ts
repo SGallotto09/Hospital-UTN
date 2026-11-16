@@ -73,7 +73,12 @@ export class Database {
         }
     }
 
-    public async cerrar(): Promise<void> {
+public async ejecutarTransaccion<T>(
+    operacion: (connection: PoolConnection) => Promise<T>
+): Promise<T> {
+    return this.withTransaction(operacion);
+}
+public async cerrar(): Promise<void> {
         await this.connection.end();
     }
 }

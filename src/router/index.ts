@@ -8,6 +8,7 @@ import AtenciónEnfermeriaView from "../FRONTEND/modules/atencion-enfermeria/vie
 
 import AdmissionLayout from "../FRONTEND/layouts/AdmissionLayout.vue";
 import DashboardView from "@/FRONTEND/modules/admicion-turnos/views/DashboardView.vue";
+import RegistroUsuariosView from "../FRONTEND/modules/IAM/RegistroUsuariosView.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -19,7 +20,6 @@ const router = createRouter({
             name: "login",
             component: LoginView
         },
-
 
         {
             path: "/",
@@ -44,10 +44,12 @@ const router = createRouter({
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
                 },
+
                 {
                     path: "/historia_clinica",
                     name: "historia_clinica",
-                    component: () => import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
+                    component: () =>
+                        import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
                 },
 
                 {
@@ -70,6 +72,15 @@ const router = createRouter({
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
                 },
+
+                // ADMINISTRACIÓN DE USUARIOS
+                {
+                    path: "usuarios/registro",
+                    name: "registro-usuarios",
+                    component: RegistroUsuariosView
+                },
+
+                // ADMISIÓN Y TURNOS
                 {
                     path: "admisiones",
                     component: AdmissionLayout,

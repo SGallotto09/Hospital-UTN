@@ -52,14 +52,8 @@ async function cerrarSesion() {
     <!-- NAVEGACIÓN -->
     <nav class="main-nav">
 
-    <!-- INICIO -->
-    <RouterLink to="/" class="nav-link">
-        <span class="nav-icon">⌂</span>
-        <span>Inicio</span>
-    </RouterLink>
-
     <!-- MÓDULOS -->
-    <RouterLink to="/pacientes" class="nav-link module-link">
+    <RouterLink to="/pacientes" class="nav-link">
         <span class="nav-icon">♙</span>
         <span>Pacientes</span>
     </RouterLink>
@@ -88,6 +82,11 @@ async function cerrarSesion() {
         <span class="nav-icon">⚙</span>
         <span>Configuración</span>
     </RouterLink>
+
+    <RouterLink to="/usuarios/registro" class="nav-link">
+    <span class="nav-icon">♙</span>
+    <span>Administrar usuarios</span>
+</RouterLink>
 
     </nav>
 
@@ -238,11 +237,6 @@ font-weight: 500;
 text-decoration: none;
 
 transition: 0.15s ease;
-}
-
-/* Separación entre Inicio y los módulos */
-.module-link {
-margin-top: 24px;
 }
 
 .nav-link:hover {
