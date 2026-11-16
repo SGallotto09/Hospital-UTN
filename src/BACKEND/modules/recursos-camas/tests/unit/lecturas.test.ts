@@ -13,7 +13,7 @@ describe('controladores de sólo lectura sin gateway de Admisión', () => {
   it('devuelve camas usando la consulta inyectada y permisos reales como contrato', async () => {
     const listar = vi.fn().mockResolvedValue([])
     const controller = new CamasController(
-      { listar },
+      { listar, listarTiposCama: vi.fn().mockResolvedValue([]) },
       undefined,
       () => ({ idUsuario: 7, permisos: ['camas:consultar'] }),
       undefined,
@@ -31,7 +31,9 @@ describe('controladores de sólo lectura sin gateway de Admisión', () => {
     'sin autorización no consulta MySQL: %j',
     async (actor) => {
       const listar = vi.fn()
-      const controller = new CamasController({ listar }, undefined, () => actor, undefined)
+      const controller = new CamasController(
+        { listar, listarTiposCama: vi.fn().mockResolvedValue([]) }, undefined, () => actor, undefined,
+      )
       const { res } = prepararRespuesta()
       const next = vi.fn()
       await controller.listar({} as Request, res, next)
@@ -44,7 +46,7 @@ describe('controladores de sólo lectura sin gateway de Admisión', () => {
 
   it('no permite invocar asignación si el montaje no configuró escrituras', async () => {
     const controller = new CamasController(
-      { listar: vi.fn() },
+      { listar: vi.fn(), listarTiposCama: vi.fn().mockResolvedValue([]) },
       undefined,
       () => ({ idUsuario: 7, permisos: ['camas:asignar'] }),
       undefined,

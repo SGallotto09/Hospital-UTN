@@ -11,6 +11,7 @@ import type {
   EstadoCama,
   AccionCama,
   SolicitudTransicion,
+  TipoCama,
 } from '../services/recursosCamasApi'
 
 const props = defineProps<{ api?: CamasApi }>()
@@ -21,6 +22,13 @@ const enviando = ref(false)
 const mapaVigente = ref(false)
 const error = ref('')
 const aviso = ref('')
+const mostrarAlta = ref(false)
+const cargandoTipos = ref(false)
+const tiposCama = ref<TipoCama[]>([])
+const habitacionNueva = ref('')
+const pisoNuevo = ref('')
+const tipoNuevo = ref('')
+const errorAlta = ref('')
 const seleccion = ref<{ cama: Cama; accion: 'asignar' | AccionCama } | null>(null)
 const estado = ref<EstadoCama | ''>('')
 const piso = ref('')
@@ -101,6 +109,55 @@ async function transicionar(solicitud: SolicitudTransicion) {
   })
 }
 
+async function abrirAlta() {
+  error.value = ''
+  aviso.value = ''
+  errorAlta.value = ''
+  mostrarAlta.value = true
+  if (tiposCama.value.length || cargandoTipos.value) return
+  cargandoTipos.value = true
+  try {
+    tiposCama.value = await api.listarTiposCama()
+  } catch (causa) {
+    errorAlta.value = causa instanceof Error ? causa.message : 'No se pudieron cargar los tipos de cama.'
+  } finally {
+    cargandoTipos.value = false
+  }
+}
+
+async function registrarCama() {
+  if (enviando.value) return
+  const habitacion = Number(habitacionNueva.value)
+  const pisoRegistrado = Number(pisoNuevo.value)
+  const idTipoCama = Number(tipoNuevo.value)
+  const enteroPositivo = (valor: number) => Number.isSafeInteger(valor) && valor > 0 && valor <= 2147483647
+  if (!enteroPositivo(habitacion) || !enteroPositivo(pisoRegistrado) || !enteroPositivo(idTipoCama)) {
+    errorAlta.value = 'Ingresá habitación, piso y tipo de cama válidos.'
+    return
+  }
+  if (!tiposCama.value.some((tipo) => tipo.id === idTipoCama)) {
+    errorAlta.value = 'Seleccioná un tipo de cama disponible.'
+    return
+  }
+  enviando.value = true
+  errorAlta.value = ''
+  try {
+    const cama = await api.registrar({ habitacion, piso: pisoRegistrado, idTipoCama })
+    mostrarAlta.value = false
+    habitacionNueva.value = ''
+    pisoNuevo.value = ''
+    tipoNuevo.value = ''
+    estado.value = ''
+    piso.value = ''
+    aviso.value = `Cama ${cama.id} registrada como ${cama.estado}.`
+    if (!(await cargar())) aviso.value += ' El alta se confirmó, pero no se pudo actualizar el mapa.'
+  } catch (causa) {
+    errorAlta.value = causa instanceof Error ? causa.message : 'No se pudo registrar la cama.'
+  } finally {
+    enviando.value = false
+  }
+}
+
 onMounted(cargar)
 </script>
 
@@ -113,13 +170,40 @@ onMounted(cargar)
         <h1>Mapa de camas</h1>
         <p>Disponibilidad, asignación y preparación de las camas del hospital.</p>
       </div>
-      <button class="primary-button" :disabled="cargando || enviando" @click="actualizar">
-        Actualizar mapa
-      </button>
+      <div class="acciones-header">
+        <button class="secondary-button" :disabled="cargando || enviando" @click="actualizar">
+          Actualizar mapa
+        </button>
+        <button class="primary-button" :disabled="cargando || enviando" @click="abrirAlta">
+          + Nueva cama
+        </button>
+      </div>
     </header>
     <div class="content">
       <p v-if="error" role="alert" class="message error">{{ error }}</p>
       <p v-if="aviso" role="status" class="message exito">{{ aviso }}</p>
+      <form v-if="mostrarAlta" class="alta-cama" @submit.prevent="registrarCama">
+        <h2>Nueva cama</h2>
+        <p v-if="errorAlta" role="alert" class="message error">{{ errorAlta }}</p>
+        <label>Habitación
+          <input v-model="habitacionNueva" type="number" min="1" max="2147483647" step="1" required />
+        </label>
+        <label>Piso
+          <input v-model="pisoNuevo" type="number" min="1" max="2147483647" step="1" required />
+        </label>
+        <label>Tipo de cama
+          <select v-model="tipoNuevo" required :disabled="cargandoTipos || !tiposCama.length">
+            <option value="" disabled>{{ cargandoTipos ? 'Cargando tipos…' : 'Seleccionar' }}</option>
+            <option v-for="tipo in tiposCama" :key="tipo.id" :value="String(tipo.id)">{{ tipo.nombre }}</option>
+          </select>
+        </label>
+        <div class="acciones-header">
+          <button type="button" class="secondary-button" :disabled="enviando" @click="mostrarAlta = false">Cancelar</button>
+          <button type="submit" class="primary-button" :disabled="enviando || cargandoTipos || !tiposCama.length">
+            {{ enviando ? 'Registrando…' : 'Registrar cama' }}
+          </button>
+        </div>
+      </form>
       <div class="filtros toolbar">
         <label class="filter"
           >Estado
@@ -231,6 +315,35 @@ h1 {
   border: 1px solid #e5ebf1;
   border-radius: 10px;
 }
+.acciones-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.secondary-button {
+  background: white;
+  color: #087fc4;
+  border-color: #b8d8ea;
+}
+.alta-cama {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  align-items: end;
+  gap: 16px;
+  padding: 20px;
+  margin-bottom: 22px;
+  background: white;
+  border: 1px solid #e5ebf1;
+  border-radius: 10px;
+}
+.alta-cama h2,
+.alta-cama .message,
+.alta-cama .acciones-header {
+  grid-column: 1 / -1;
+}
+.alta-cama h2 { margin: 0; font-size: 18px; }
+.alta-cama label { display: grid; gap: 7px; color: #526879; font-weight: 600; }
+.alta-cama input { min-width: 0; padding: 10px 12px; border: 1px solid #dce5eb; border-radius: 7px; font: inherit; }
 .filter {
   display: flex;
   align-items: center;

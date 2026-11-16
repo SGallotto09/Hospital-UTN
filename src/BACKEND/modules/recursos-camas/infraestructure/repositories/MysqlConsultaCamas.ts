@@ -3,6 +3,7 @@ import type { CamaDTO } from '../../application/dtos/CamasDTO.js'
 import type { EjecutorMysql } from '../database/ContratosMysql.js'
 import { mapearEstado, type CamaFila } from '../mappers/CamaMapper.js'
 import { validarId } from '../../domain/errors/ErrorRecursosCamas.js'
+import type { RowDataPacket } from 'mysql2/promise'
 
 interface CamaMapaFila extends CamaFila {
   tipo: string
@@ -33,6 +34,19 @@ export class MysqlConsultaCamas implements IConsultaCamas {
         disponible: estado === 'Libre' && fila.id_asignacion_activa === null,
         idAsignacionActiva: fila.id_asignacion_activa,
       }
+    })
+  }
+
+  async listarTiposCama() {
+    const [filas] = await this.db.execute<(RowDataPacket & { id: number; nombre: string })[]>(`
+      SELECT id, nombre FROM tipo_cama ORDER BY id
+    `)
+    return filas.map((fila) => {
+      validarId(fila.id, 'idTipoCama')
+      if (typeof fila.nombre !== 'string' || !fila.nombre.trim()) {
+        throw new Error('La base de datos devolviÃ³ un tipo de cama sin nombre.')
+      }
+      return { id: fila.id, nombre: fila.nombre }
     })
   }
 }

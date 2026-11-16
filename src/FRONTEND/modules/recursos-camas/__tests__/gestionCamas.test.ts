@@ -30,6 +30,8 @@ const asignacion = {
 function crearApi(): CamasApi {
   return {
     listar: vi.fn().mockResolvedValue([cama]),
+    listarTiposCama: vi.fn().mockResolvedValue([{ id: 1, nombre: 'Compartida' }]),
+    registrar: vi.fn().mockResolvedValue({ id: 102, estado: 'Libre', habitacion: 205, piso: 2, idTipoCama: 1 }),
     asignar: vi.fn().mockResolvedValue(asignacion),
     buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),
     transicionar: vi.fn(),
@@ -119,6 +121,28 @@ describe('búsqueda por DNI en el formulario', () => {
 })
 
 describe('vista integrada con servicio inyectado', () => {
+  it('registra una cama y refresca el listado', async () => {
+    const api = crearApi()
+    api.listar = vi.fn()
+      .mockResolvedValueOnce([cama])
+      .mockResolvedValueOnce([{ ...cama, id: 102, habitacion: 205 }])
+    const wrapper = mount(GestionCamasView, { props: { api } })
+    await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '+ Nueva cama')!.trigger('click')
+    await flushPromises()
+    const inputs = wrapper.findAll('.alta-cama input')
+    await inputs[0]!.setValue('205')
+    await inputs[1]!.setValue('2')
+    await wrapper.get('.alta-cama select').setValue('1')
+    await wrapper.get('.alta-cama').trigger('submit')
+    await flushPromises()
+    expect(api.registrar).toHaveBeenCalledWith({ habitacion: 205, piso: 2, idTipoCama: 1 })
+    expect(api.listar).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[role="status"]').text()).toContain('Cama 102 registrada como Libre')
+    expect(wrapper.text()).toContain('205')
+    wrapper.unmount()
+  })
+
   it('envía en el POST el ID recuperado por búsqueda, nunca el DNI numérico', async () => {
     const pacienteEncontrado = { id: 7, nombre: 'Ana', apellido: 'Prueba', dni: '35678901' }
     const solicitar = vi.fn<typeof fetch>(async (entrada, opciones) => {

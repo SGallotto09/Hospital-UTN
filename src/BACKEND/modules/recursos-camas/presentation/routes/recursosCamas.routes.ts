@@ -47,8 +47,10 @@ export function crearRecursosCamasRouter(
 ): Router {
   const router = Router()
   router.get('/camas', controller.listar)
+  router.get('/tipos-cama', controller.listarTiposCama)
   router.get('/insumos', inventario.listar)
   if (!soloLectura) {
+    router.post('/camas', controller.registrar)
     if (permitirAsignacion) {
       router.get('/pacientes', controller.buscarPaciente)
       router.post('/asignaciones', controller.asignar)
