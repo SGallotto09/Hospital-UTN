@@ -39,11 +39,18 @@ export class FacturacionRoutes {
       (req, res) => this.controller.registrarManual(req, res)
     );
 
-    // HU 1.1 - Calcular prestación por cobertura
+    // HU 1.1 - Calcular una prestación
     this.router.post(
       '/prestaciones/calcular',
       verificarRol(['Administrador']),
       (req, res) => this.controller.calcularPrestacion(req, res)
+    );
+
+    // HU 1.1 - Facturar y guardar en MySQL
+    this.router.post(
+      '/prestaciones/facturar',
+      verificarRol(['Administrador']),
+      (req, res) => this.controller.facturar(req, res)
     );
 
   }

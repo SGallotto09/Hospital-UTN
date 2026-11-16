@@ -13,12 +13,27 @@ import { Database } from "./database/connectionDB.js";
 import session from "express-session";
 import "dotenv/config";
 
+import { CuentaFacturacionMySQLRepository } from "./modules/facturacion-administracion/infraestructure/CuentaFacturacionMySQLRepository.js";
+import { CrearCuentaFacturacion } from "./modules/facturacion-administracion/use-cases/CrearCuentaFacturacion.js";
+import { FacturacionController } from "./modules/facturacion-administracion/infraestructure/api/FacturacionController.js";
+import { FacturacionRoutes } from "./modules/facturacion-administracion/infraestructure/api/FacturacionRoutes.js";
+import { CargoFacturacionMySQLRepository } from "./modules/facturacion-administracion/infraestructure/CargoFacturacionMySQLRepository.js";
+import { RegistrarCargoFacturacion } from "./modules/facturacion-administracion/use-cases/RegistrarCargoFacturacion.js";
+import { FacturarPrestacion } from "./modules/facturacion-administracion/use-cases/FacturarPrestacion.js";
+import { RegistroPrestacionMySQLRepository } from "./modules/facturacion-administracion/infraestructure/RegistroPrestacionMySQLRepository.js";
+
+
 for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
     if (!process.env[nombre]?.trim()) throw new Error(`Falta configurar ${nombre}`);
 }
+
 if (process.env.DB_PASSWORD === undefined) throw new Error("Falta configurar DB_PASSWORD");
+
 const PORT = Number(process.env.PORT ?? 3000);
-if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error("PORT inválido");
+
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+    throw new Error("PORT inválido");
+}
 
 const app = express();
 
@@ -36,6 +51,9 @@ app.use(session({
     }
 }));
 
+// ========================================
+// IAM - IDENTIDAD Y ACCESOS
+// ========================================
 
 const usuarioRepository = new UsuarioMySQLRepository();
 
@@ -61,45 +79,125 @@ const registroRoutes = new RegistroRoutes(registroController);
 app.use("/api/auth", authRoutes.obtenerRouter());
 app.use("/api/auth", registroRoutes.obtenerRouter());
 
+// ========================================
+// FACTURACION Y ADMINISTRACION
+// ========================================
+
+const cuentaFacturacionRepository =
+    new CuentaFacturacionMySQLRepository();
+
+const crearCuentaFacturacion =
+    new CrearCuentaFacturacion(cuentaFacturacionRepository);
+
+const cargoFacturacionRepository =
+    new CargoFacturacionMySQLRepository();
+
+const registrarCargoFacturacion =
+    new RegistrarCargoFacturacion(cargoFacturacionRepository);
+
+// Registro de prestaciones con transacciones MySQL
+const registroPrestacionRepository =
+    new RegistroPrestacionMySQLRepository();
+
+const facturarPrestacion =
+    new FacturarPrestacion(registroPrestacionRepository);
+
+const facturacionController = new FacturacionController(
+    crearCuentaFacturacion,
+    cuentaFacturacionRepository,
+    registrarCargoFacturacion,
+    facturarPrestacion
+);
+
+const facturacionRoutes =
+    new FacturacionRoutes(facturacionController);
+
+app.use(
+    "/api/facturacion",
+    facturacionRoutes.obtenerRouter()
+);
+
+// ========================================
+// BASE DE DATOS
+// ========================================
+
 const database = Database.getInstance();
 
+// ========================================
+// MANEJO DE RUTAS Y ERRORES
+// ========================================
 
 app.use((_req, res) => {
     res.status(404).json({ mensaje: "Ruta no encontrada" });
 });
+
 const manejarError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
-    if (res.headersSent) { next(error); return; }
-    if (error instanceof SyntaxError && 'type' in error && error.type === 'entity.parse.failed') {
-        res.status(400).json({ mensaje: "El cuerpo debe contener JSON válido" });
+    if (res.headersSent) {
+        next(error);
         return;
     }
-    if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
-        res.status(413).json({ mensaje: "El cuerpo de la solicitud es demasiado grande" });
+
+    if (
+        error instanceof SyntaxError &&
+        'type' in error &&
+        error.type === 'entity.parse.failed'
+    ) {
+        res.status(400).json({
+            mensaje: "El cuerpo debe contener JSON válido"
+        });
         return;
     }
+
+    if (
+        error &&
+        typeof error === 'object' &&
+        'type' in error &&
+        error.type === 'entity.too.large'
+    ) {
+        res.status(413).json({
+            mensaje: "El cuerpo de la solicitud es demasiado grande"
+        });
+        return;
+    }
+
     console.error("Error al procesar la solicitud", error);
-    res.status(500).json({ mensaje: "Error interno del servidor" });
+
+    res.status(500).json({
+        mensaje: "Error interno del servidor"
+    });
 };
+
 app.use(manejarError);
+
+// ========================================
+// INICIO DEL SERVIDOR
+// ========================================
 
 if (!await database.probarConexion()) {
     await database.cerrar();
     throw new Error("No se pudo iniciar el servidor: MySQL no está disponible");
 }
+
 const servidor = app.listen(PORT, () => {
     console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
 });
+
 servidor.on("error", (error) => {
     console.error("No se pudo iniciar el servidor HTTP", error);
     process.exitCode = 1;
+
     void database.cerrar().catch((errorCierre: unknown) => {
         console.error("No se pudo cerrar MySQL", errorCierre);
     });
 });
+
 let cerrando = false;
+
 function cerrarServidor() {
     if (cerrando) return;
+
     cerrando = true;
+
     servidor.close(() => {
         void database.cerrar().catch((error: unknown) => {
             console.error("No se pudo cerrar MySQL", error);
@@ -107,5 +205,6 @@ function cerrarServidor() {
         });
     });
 }
+
 process.once("SIGINT", cerrarServidor);
 process.once("SIGTERM", cerrarServidor);

@@ -13,13 +13,15 @@ import type { ICuentaFacturacionRepository } from '../../domain/repositories/ICu
 import { CrearCuentaFacturacion } from '../../use-cases/CrearCuentaFacturacion.js';
 import { RegistrarCargoFacturacion } from '../../use-cases/RegistrarCargoFacturacion.js';
 import { CalcularCostoPrestacion } from '../../use-cases/CalcularCostoPrestacion.js';
+import { FacturarPrestacion } from '../../use-cases/FacturarPrestacion.js';
 
 export class FacturacionController {
 
   constructor(
     private crearCuenta: CrearCuentaFacturacion,
     private repositorio: ICuentaFacturacionRepository,
-    private registrarCargo: RegistrarCargoFacturacion
+    private registrarCargo: RegistrarCargoFacturacion,
+    private facturarPrestacion: FacturarPrestacion
   ) {}
 
   // ========================================
@@ -242,17 +244,15 @@ export class FacturacionController {
         estrategia = new CoberturaPrepaga(copago);
         break;
 
-      
-case 'particular':
-  estrategia = new CoberturaParticular();
-  break;
+      case 'particular':
+        estrategia = new CoberturaParticular();
+        break;
 
-default:
-  res.status(400).json({
-    mensaje: 'El tipo de cobertura no es válido'
-  });
-  return;
-
+      default:
+        res.status(400).json({
+          mensaje: 'El tipo de cobertura no es válido'
+        });
+        return;
     }
 
     try {
@@ -274,6 +274,64 @@ default:
 
       res.status(500).json({
         mensaje: 'No se pudo calcular la prestación'
+      });
+    }
+  }
+
+  // ========================================
+  // FACTURAR PRESTACIÓN Y GUARDAR EN MYSQL
+  // HU 1.1 - TRANSACCIÓN
+  // ========================================
+
+  async facturar(req: Request, res: Response): Promise<void> {
+
+    try {
+
+      const resultado =
+        await this.facturarPrestacion.ejecutar(
+          req.body ?? {}
+        );
+
+      res.status(201).json({
+        mensaje: 'Prestación facturada correctamente',
+        ...resultado
+      });
+
+    } catch (error) {
+
+      if (error instanceof Error) {
+
+        const erroresValidacion = [
+          'La cuenta de facturación no es válida',
+          'El concepto de la prestación no es válido',
+          'El valor base de la prestación no es válido',
+          'El copago de la prepaga no es válido',
+          'Debe indicar el nombre de la prepaga',
+          'El tipo de cobertura no es válido'
+        ];
+
+        if (erroresValidacion.includes(error.message)) {
+          res.status(400).json({
+            mensaje: error.message
+          });
+          return;
+        }
+
+        if (
+          error.message ===
+          'La cuenta de facturación no existe o no está activa'
+        ) {
+          res.status(404).json({
+            mensaje: error.message
+          });
+          return;
+        }
+      }
+
+      console.error('Error al facturar prestación', error);
+
+      res.status(500).json({
+        mensaje: 'No se pudo facturar la prestación'
       });
     }
   }
