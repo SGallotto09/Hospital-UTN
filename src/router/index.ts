@@ -1,4 +1,3 @@
-
 import { createRouter, createWebHistory } from "vue-router";
 
 import LoginView from "../FRONTEND/modules/IAM/views/LoginView.vue";
@@ -17,7 +16,6 @@ const router = createRouter({
     history: createWebHistory(),
 
     routes: [
-        // LOGIN
         {
             path: "/login",
             name: "login",
@@ -34,7 +32,6 @@ const router = createRouter({
                     redirect: "/login"
                 },
 
-                // ATENCIÓN Y ENFERMERÍA
                 {
                     path: "enfermeria",
                     name: "enfermeria",
@@ -91,6 +88,27 @@ const router = createRouter({
                 },
 
                 // ADMISIÓN Y TURNOS
+                {
+                    path: "enfermeria/protocolos",
+                    name: "enfermeria-protocolos",
+                    component: () =>
+                        import("@/FRONTEND/modules/atencion-enfermeria/views/ProtocolosView.vue")
+                },
+
+                {
+                    path: "recursos-camas",
+                    name: "recursos-camas",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/GestionCamasView.vue")
+                },
+
+                {
+                    path: "recursos-camas/inventario",
+                    name: "recursos-camas-inventario",
+                    component: () =>
+                        import("@/FRONTEND/modules/recursos-camas/views/InventarioView.vue")
+                },
+
                 {
                     path: "admisiones",
                     component: AdmissionLayout,

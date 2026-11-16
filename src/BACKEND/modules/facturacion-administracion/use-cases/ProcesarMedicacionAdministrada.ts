@@ -68,8 +68,8 @@ if (datos.estado.trim().toLowerCase() !== 'administrada') {
 }
 
 
-    // La cantidad indicada corresponde al tratamiento completo.
-    // No debe confundirse con la dosis efectivamente administrada.
+    // El adaptador prioriza la cantidad persistida al administrar; conserva
+    // la referencia de la indicación para registros anteriores sin consumo.
     if (
       cantidadAdministrada > datos.cantidadTotalTratamiento
     ) {

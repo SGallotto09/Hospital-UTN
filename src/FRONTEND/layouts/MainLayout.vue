@@ -52,13 +52,14 @@ async function cerrarSesion() {
     <!-- NAVEGACIÓN -->
     <nav class="main-nav">
 
-    <!-- MÓDULOS -->
-    <RouterLink to="/pacientes" class="nav-link">
-        <span class="nav-icon">♙</span>
-        <span>Pacientes</span>
+    <!-- INICIO -->
+    <RouterLink to="/" class="nav-link">
+        <span class="nav-icon">⌂</span>
+        <span>Inicio</span>
     </RouterLink>
 
-    <RouterLink to="/admisiones" class="nav-link">
+    <!-- MÓDULOS -->
+    <RouterLink to="/admisiones" class="nav-link module-link">
         <span class="nav-icon">▣</span>
         <span>Admisión y turnos</span>
     </RouterLink>
@@ -73,20 +74,20 @@ async function cerrarSesion() {
         <span>Atención y enfermería</span>
     </RouterLink>
 
+    <RouterLink to="/recursos-camas" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">▤</span>
+        <span>Recursos y camas</span>
+    </RouterLink>
+
     <RouterLink to="/facturacion" class="nav-link">
         <span class="nav-icon">$</span>
         <span>Facturación</span>
     </RouterLink>
 
-    <RouterLink to="/configuracion" class="nav-link">
-        <span class="nav-icon">⚙</span>
-        <span>Configuración</span>
-    </RouterLink>
-
     <RouterLink to="/usuarios/registro" class="nav-link">
-    <span class="nav-icon">♙</span>
-    <span>Administrar usuarios</span>
-</RouterLink>
+        <span class="nav-icon">&#9817;</span>
+        <span>Administrar usuarios</span>
+    </RouterLink>
 
     </nav>
 
@@ -237,6 +238,11 @@ font-weight: 500;
 text-decoration: none;
 
 transition: 0.15s ease;
+}
+
+/* Separación entre Inicio y los módulos */
+.module-link {
+margin-top: 24px;
 }
 
 .nav-link:hover {

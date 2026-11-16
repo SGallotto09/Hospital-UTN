@@ -10,7 +10,7 @@ export class CuentaFacturacion {
     public idPaciente: number
   ) {}
 
- 
+
 
 agregarCargo(cargo: Cargo): void {
 

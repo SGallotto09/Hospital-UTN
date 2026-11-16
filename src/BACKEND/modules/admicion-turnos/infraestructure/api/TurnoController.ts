@@ -68,7 +68,7 @@ export class TurnoController {
         private readonly cambiarEstadoTurno: CambiarEstadoTurno,
         private readonly casoInsertarEntreturno: InsertarEntreturno
     ) {}
-    
+
     // GET /agenda
     listarAgenda: RequestHandler = async (req, res, next) => {
         try {

@@ -3,6 +3,18 @@ import express, { type ErrorRequestHandler } from "express";
 import { createServer } from "node:http";
 import session from "express-session";
 import "dotenv/config";
+import { verificarSesion } from "./modules/IAM/infraestructure/middlewares/verificarSesion.js";
+import { crearModuloRecursosCamas, crearConsumidorConsumos } from "./modules/recursos-camas/recursosCamas.module.js";
+import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from "./modules/recursos-camas/infraestructure/api/obtenerActorSesion.js";
+import { crearProveedorTransacciones } from "./modules/recursos-camas/infraestructure/database/ContratosMysql.js";
+import { crearPacienteGatewayAdmision } from "./modules/recursos-camas/infraestructure/crearPacienteGatewayAdmision.js";
+import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
+import signoVitalRoutes from "./modules/atencion-enfermeria/infraestructure/api/signos-vitales/signo_vital_routes.js";
+import pacienteInternadoRoutes from "./modules/atencion-enfermeria/infraestructure/api/pacientes-internados/paciente_internado_routes.js";
+import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/dashboard/dashboard_routes.js";
+import protocoloAtencionRoutes from "./modules/atencion-enfermeria/infraestructure/api/protocolos/protocolo_atencion_routes.js";
+import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
+import { iniciarProcesadorConsumos } from "./modules/recursos-camas/infraestructure/procesarConsumosPendientes.js";
 
 // ==========================================
 // IAM
@@ -247,6 +259,20 @@ app.use(
 
 const pacienteRepository = new MySQLPacienteRepository();
 
+const transacciones = crearProveedorTransacciones(database);
+const registroConsumos = crearRegistroConsumosMysql();
+app.use("/api/administracion-medicacion", verificarSesion, administracionMedicacionRoutes);
+app.use("/api/signos-vitales", verificarSesion, signoVitalRoutes);
+app.use("/api/pacientes-internados", verificarSesion, pacienteInternadoRoutes);
+app.use("/api/dashboard", verificarSesion, dashboardRoutes);
+app.use("/api/protocolos", verificarSesion, protocoloAtencionRoutes);
+app.use("/api/recursos-camas", verificarSesion, crearModuloRecursosCamas({
+    database,
+    obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),
+    transacciones,
+    registroConsumos,
+    pacientes: crearPacienteGatewayAdmision(pacienteRepository),
+}));
 const registrarPaciente = new RegistrarPaciente(
     pacienteRepository
 );
@@ -370,7 +396,7 @@ app.use(
 // INICIALIZACIÓN DE FACTURACIÓN
 // ==========================================
 
-iniciarFacturacionMedicacion();
+const procesarFacturacionMedicacion = iniciarFacturacionMedicacion();
 
 // ==========================================
 // RUTA 404
@@ -433,43 +459,36 @@ app.use(manejarError);
 // INICIO DEL SERVIDOR
 // ==========================================
 
+let detenerProcesador: (() => Promise<void>) | undefined;
+let cerrando = false;
+
+async function cerrarServidor() {
+    if (cerrando) return;
+    cerrando = true;
+    try {
+        // Socket.IO cierra sus conexiones y espera el cierre del HTTP compartido.
+        await io.close();
+        await detenerProcesador?.();
+        await database.cerrar();
+    } catch (error) {
+        console.error("No se pudieron cerrar los recursos del servidor", error);
+        process.exitCode = 1;
+    }
+}
+
 servidor.on("error", (error) => {
     console.error("No se pudo iniciar el servidor HTTP", error);
-
     process.exitCode = 1;
-
-    void database.cerrar().catch((errorCierre: unknown) => {
-        console.error("No se pudo cerrar MySQL", errorCierre);
-    });
+    void cerrarServidor();
 });
 
 servidor.listen(PORT, () => {
-    console.log(
-        `Servidor backend funcionando en http://localhost:${PORT}`
-    );
-
+    detenerProcesador = iniciarProcesadorConsumos(database,
+        crearConsumidorConsumos({ database, transacciones, registroConsumos }),
+        5000, procesarFacturacionMedicacion);
+    console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
     console.log("Socket.IO inicializado correctamente");
 });
 
-// ==========================================
-// CIERRE DEL SERVIDOR
-// ==========================================
-
-let cerrando = false;
-
-function cerrarServidor() {
-    if (cerrando) return;
-
-    cerrando = true;
-
-    io.close(() => {
-        void database.cerrar().catch((error: unknown) => {
-            console.error("No se pudo cerrar MySQL", error);
-
-            process.exitCode = 1;
-        });
-    });
-}
-
-process.once("SIGINT", cerrarServidor);
-process.once("SIGTERM", cerrarServidor);
+process.once("SIGINT", () => { void cerrarServidor(); });
+process.once("SIGTERM", () => { void cerrarServidor(); });
