@@ -1,5 +1,5 @@
 
-import mysql, { type Pool } from "mysql2/promise";
+import mysql, { type Pool, type PoolConnection } from "mysql2/promise";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -28,23 +28,52 @@ export class Database {
         return Database.instance;
     }
 
+    // Se conserva la firma compartida utilizada por los repositorios del grupo.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     public async query(sql: string, values?: any[]) {
         return this.connection.execute(sql, values);
     }
 
     public async probarConexion(): Promise<boolean> {
+        let conexion: PoolConnection | undefined;
         try {
-            const conexion = await this.connection.getConnection();
+            conexion = await this.connection.getConnection();
             await conexion.ping();
-            conexion.release();
 
             console.log("Conexión exitosa");
             return true;
         } catch (error) {
             console.error("Error al conectar a MySQL:", error);
             return false;
+        } finally {
+            conexion?.release();
         }
     }
 
+    public async withTransaction<T>(operacion: (conexion: PoolConnection) => Promise<T>): Promise<T> {
+        const conexion = await this.connection.getConnection();
+        let descartar = false;
+        try {
+            await conexion.beginTransaction();
+            const resultado = await operacion(conexion);
+            await conexion.commit();
+            return resultado;
+        } catch (error) {
+            try {
+                await conexion.rollback();
+            } catch (errorRollback) {
+                descartar = true;
+                throw new AggregateError([error, errorRollback], "Falló la transacción y su rollback");
+            }
+            throw error;
+        } finally {
+            if (descartar) conexion.destroy();
+            else conexion.release();
+        }
     }
+
+    public async cerrar(): Promise<void> {
+        await this.connection.end();
+    }
+}
 

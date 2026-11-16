@@ -1,5 +1,5 @@
 
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import { UsuarioMySQLRepository } from "./modules/IAM/infraestructure/repositories/UsuarioMySQLRepository.js";
 import { BcryptVerificadorContrasenia } from "./modules/IAM/infraestructure/repositories/BcryptVerificadorContrasenia.js";
 import { BcryptHasheadorContrasenia } from "./modules/IAM/infraestructure/repositories/BcryptHasheadorContrasenia.js";
@@ -12,6 +12,13 @@ import { RegistroRoutes } from "./modules/IAM/infraestructure/api/RegistroRoutes
 import { Database } from "./database/connectionDB.js";
 import session from "express-session";
 import "dotenv/config";
+
+for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
+    if (!process.env[nombre]?.trim()) throw new Error(`Falta configurar ${nombre}`);
+}
+if (process.env.DB_PASSWORD === undefined) throw new Error("Falta configurar DB_PASSWORD");
+const PORT = Number(process.env.PORT ?? 3000);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error("PORT inválido");
 
 const app = express();
 
@@ -29,7 +36,6 @@ app.use(session({
     }
 }));
 
-const PORT = 3000;
 
 const usuarioRepository = new UsuarioMySQLRepository();
 
@@ -57,8 +63,49 @@ app.use("/api/auth", registroRoutes.obtenerRouter());
 
 const database = Database.getInstance();
 
-database.probarConexion();
 
-app.listen(PORT, () => {
+app.use((_req, res) => {
+    res.status(404).json({ mensaje: "Ruta no encontrada" });
+});
+const manejarError: ErrorRequestHandler = (error: unknown, _req, res, next) => {
+    if (res.headersSent) { next(error); return; }
+    if (error instanceof SyntaxError && 'type' in error && error.type === 'entity.parse.failed') {
+        res.status(400).json({ mensaje: "El cuerpo debe contener JSON válido" });
+        return;
+    }
+    if (error && typeof error === 'object' && 'type' in error && error.type === 'entity.too.large') {
+        res.status(413).json({ mensaje: "El cuerpo de la solicitud es demasiado grande" });
+        return;
+    }
+    console.error("Error al procesar la solicitud", error);
+    res.status(500).json({ mensaje: "Error interno del servidor" });
+};
+app.use(manejarError);
+
+if (!await database.probarConexion()) {
+    await database.cerrar();
+    throw new Error("No se pudo iniciar el servidor: MySQL no está disponible");
+}
+const servidor = app.listen(PORT, () => {
     console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
 });
+servidor.on("error", (error) => {
+    console.error("No se pudo iniciar el servidor HTTP", error);
+    process.exitCode = 1;
+    void database.cerrar().catch((errorCierre: unknown) => {
+        console.error("No se pudo cerrar MySQL", errorCierre);
+    });
+});
+let cerrando = false;
+function cerrarServidor() {
+    if (cerrando) return;
+    cerrando = true;
+    servidor.close(() => {
+        void database.cerrar().catch((error: unknown) => {
+            console.error("No se pudo cerrar MySQL", error);
+            process.exitCode = 1;
+        });
+    });
+}
+process.once("SIGINT", cerrarServidor);
+process.once("SIGTERM", cerrarServidor);
