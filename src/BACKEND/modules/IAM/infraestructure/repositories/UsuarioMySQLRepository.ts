@@ -22,11 +22,11 @@ export class UsuarioMySQLRepository implements UsuarioRepository {
         this.database = Database.getInstance();
     }
 
-    async buscarPorEmail(email: string): Promise<Usuario | null> {
-        const [filas] = await this.database.query(
-            "SELECT * FROM usuarios WHERE email = ?",
-            [email]
-        );
+    async buscarPorUsuario(usuario: string): Promise<Usuario | null> {
+    const [filas] = await this.database.query(
+        "SELECT * FROM usuarios WHERE usuario = ?",
+        [usuario]
+    );
 
         const usuarios = filas as UsuarioRow[];
 
