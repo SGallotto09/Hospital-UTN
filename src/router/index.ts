@@ -8,6 +8,7 @@ import AtenciónEnfermeriaView from "../FRONTEND/modules/atencion-enfermeria/vie
 
 import AdmissionLayout from "../FRONTEND/layouts/AdmissionLayout.vue";
 import DashboardView from "@/FRONTEND/modules/admicion-turnos/views/DashboardView.vue";
+import RegistroUsuariosView from "../FRONTEND/modules/IAM/RegistroUsuariosView.vue";
 
 // FACTURACIÓN Y ADMINISTRACIÓN
 import FacturacionView from "../FRONTEND/modules/facturacion-administracion/views/FacturacionView.vue";
@@ -73,6 +74,13 @@ const router = createRouter({
                     name: "enfermeria-alertas",
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/AlertasView.vue")
+                },
+
+                // ADMINISTRACIÓN DE USUARIOS
+                {
+                    path: "usuarios/registro",
+                    name: "registro-usuarios",
+                    component: RegistroUsuariosView
                 },
 
                 // FACTURACIÓN Y ADMINISTRACIÓN
