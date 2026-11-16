@@ -13,6 +13,7 @@ const estadosHttp: Record<CodigoError, number> = {
   DATOS_INVALIDOS: 400,
   CAMA_NO_ENCONTRADA: 404,
   PACIENTE_NO_ENCONTRADO: 404,
+  PACIENTE_YA_ASIGNADO: 409,
   CAMA_NO_DISPONIBLE: 409,
   TRANSICION_INVALIDA: 409,
   TRANSACCIONES_NO_DISPONIBLES: 503,
@@ -48,7 +49,10 @@ export function crearRecursosCamasRouter(
   router.get('/camas', controller.listar)
   router.get('/insumos', inventario.listar)
   if (!soloLectura) {
-    if (permitirAsignacion) router.post('/asignaciones', controller.asignar)
+    if (permitirAsignacion) {
+      router.get('/pacientes', controller.buscarPaciente)
+      router.post('/asignaciones', controller.asignar)
+    }
     router.post('/camas/:idCama/liberacion', controller.transicionar('liberar'))
     router.post(
       '/camas/:idCama/confirmacion-limpieza',

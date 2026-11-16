@@ -1,18 +1,47 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { Cama } from '../services/recursosCamasApi'
-defineProps<{ cama: Cama; enviando: boolean }>()
+import { onBeforeUnmount, ref, watch } from 'vue'
+import type { Cama, PacienteParaAsignacion } from '../services/recursosCamasApi'
+
+const props = defineProps<{
+  cama: Cama
+  enviando: boolean
+  buscarPaciente: (dni: string) => Promise<PacienteParaAsignacion>
+}>()
 const emit = defineEmits<{ confirmar: [idPaciente: number]; cancelar: [] }>()
-const paciente = ref('')
-const pacienteValido = computed(
-  () =>
-    /^\d+$/.test(paciente.value) &&
-    Number.isSafeInteger(Number(paciente.value)) &&
-    Number(paciente.value) > 0 &&
-    Number(paciente.value) <= 2147483647,
-)
+const dni = ref('')
+const paciente = ref<PacienteParaAsignacion | null>(null)
+const buscando = ref(false)
+const error = ref('')
+let busquedaActual = 0
+
+watch(dni, () => {
+  busquedaActual++
+  paciente.value = null
+  error.value = ''
+  buscando.value = false
+}, { flush: 'sync' })
+onBeforeUnmount(() => { busquedaActual++ })
+
+async function buscar() {
+  if (!dni.value.trim() || buscando.value || props.enviando) return
+  const numeroBusqueda = ++busquedaActual
+  paciente.value = null
+  error.value = ''
+  buscando.value = true
+  try {
+    const encontrado = await props.buscarPaciente(dni.value.trim())
+    if (numeroBusqueda === busquedaActual) paciente.value = encontrado
+  } catch (causa) {
+    if (numeroBusqueda === busquedaActual) {
+      error.value = causa instanceof Error ? causa.message : 'No se pudo buscar al paciente.'
+    }
+  } finally {
+    if (numeroBusqueda === busquedaActual) buscando.value = false
+  }
+}
+
 function confirmar() {
-  if (pacienteValido.value) emit('confirmar', Number(paciente.value))
+  if (paciente.value && !buscando.value && !props.enviando) emit('confirmar', paciente.value.id)
 }
 </script>
 
@@ -24,21 +53,31 @@ function confirmar() {
       confirmar.
     </p>
     <form @submit.prevent="confirmar">
-      <label for="paciente-id">ID del paciente registrado</label>
+      <label for="paciente-dni">DNI del paciente</label>
       <input
-        id="paciente-id"
-        v-model="paciente"
+        id="paciente-dni"
+        v-model="dni"
         inputmode="numeric"
         autocomplete="off"
         :disabled="enviando"
         required
         aria-describedby="ayuda-paciente"
       />
-      <small id="ayuda-paciente"
-        >Ingresá el identificador del paciente proporcionado por Admisión.</small
-      >
+      <small id="ayuda-paciente">
+        Buscá al paciente registrado en Admisión y verificá sus datos antes de confirmar.
+      </small>
       <div class="acciones">
-        <button type="submit" :disabled="enviando || !pacienteValido">
+        <button type="button" :disabled="enviando || buscando || !dni.trim()" @click="buscar">
+          {{ buscando ? 'Buscando…' : 'Buscar paciente' }}
+        </button>
+      </div>
+      <p v-if="buscando" role="status">Buscando paciente…</p>
+      <p v-if="error" role="alert">{{ error }}</p>
+      <p v-if="paciente" role="status">
+        {{ paciente.nombre }} {{ paciente.apellido }} — DNI: {{ paciente.dni }}
+      </p>
+      <div class="acciones">
+        <button type="submit" :disabled="enviando || buscando || !paciente">
           {{ enviando ? 'Asignando…' : 'Confirmar asignación' }}
         </button>
         <button type="button" :disabled="enviando" @click="emit('cancelar')">Cancelar</button>

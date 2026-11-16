@@ -88,6 +88,22 @@ describe('adaptador de asignaciones: contrato SQL', () => {
     const { repository } = preparar([[fila], [], { affectedRows: 1 }, error])
     await expect(repository.asignarSiDisponible(solicitud, (c) => c.ocupar())).rejects.toBe(error)
   })
+
+  it('traduce uq_paciente_activo en conflicto aunque la cama esté libre', async () => {
+    const duplicado = Object.assign(
+      new Error("Duplicate entry '8' for key 'uq_paciente_activo'"),
+      { code: 'ER_DUP_ENTRY' },
+    )
+    const { repository } = preparar([[fila], [], { affectedRows: 1 }, duplicado])
+    await expect(repository.asignarSiDisponible(solicitud, c => c.ocupar()))
+      .rejects.toMatchObject({ codigo: 'PACIENTE_YA_ASIGNADO' })
+  })
+
+  it('no oculta errores de otros índices únicos', async () => {
+    const duplicado = Object.assign(new Error("Duplicate entry for key 'otro_indice'"), { code: 'ER_DUP_ENTRY' })
+    const { repository } = preparar([[fila], [], { affectedRows: 1 }, duplicado])
+    await expect(repository.asignarSiDisponible(solicitud, c => c.ocupar())).rejects.toBe(duplicado)
+  })
 })
 
 describe('consulta del mapa', () => {

@@ -65,7 +65,7 @@ export function crearModuloRecursosCamas(deps: DependenciasRecursosCamas) {
     : undefined
   const transicionar = new TransicionarCama(new MysqlTransicionCamaRepository(deps.transacciones))
   return crearRecursosCamasRouter(
-    new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar),
+    new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar, deps.pacientes),
     new InventarioController(crearRepositorioInsumos(deps), deps.obtenerActor),
     false,
     !!deps.pacientes,

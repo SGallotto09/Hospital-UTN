@@ -17,12 +17,12 @@ interface IngresoFila extends RowDataPacket {
   fecha_ingreso: Date
 }
 
-function esCamaDuplicada(error: unknown): boolean {
+function esAsignacionDuplicada(error: unknown, indice: string): boolean {
   return (
     error instanceof Error &&
     'code' in error &&
     error.code === 'ER_DUP_ENTRY' &&
-    error.message.includes('uq_cama_activa')
+    error.message.includes(indice)
   )
 }
 
@@ -72,7 +72,13 @@ export class MysqlAsignacionCamaRepository implements IAsignacionCamaRepository 
         )
       })
     } catch (error) {
-      if (esCamaDuplicada(error)) {
+      if (esAsignacionDuplicada(error, 'uq_paciente_activo')) {
+        throw new ErrorRecursosCamas(
+          'PACIENTE_YA_ASIGNADO',
+          'El paciente ya tiene una cama asignada. Actualizá el mapa.',
+        )
+      }
+      if (esAsignacionDuplicada(error, 'uq_cama_activa')) {
         throw new ErrorRecursosCamas(
           'CAMA_NO_DISPONIBLE',
           'La cama acaba de ser ocupada. Actualizá el mapa.',

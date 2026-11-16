@@ -4,17 +4,23 @@ Módulo del monolito Hospital-UTN: backend Node.js/Express/TypeScript y frontend
 Referencias: historias de usuario y dump `hospital_utn (3).sql` (MySQL 8.0.46).
 
 Integración compartida implementada: servidor Express, sesiones IAM, política de roles aprobada,
-withTransaction() y proxy /api. La asignación no se monta sin Admisión.
+withTransaction() y proxy /api. Asignación habilitada mediante el repositorio de Admisión,
+sin duplicar SQL de pacientes. La base local ya tiene unicidad activa por cama y paciente.
 Ver estado real y pendientes en [integracion/README.md](integracion/README.md).
 
 ## Implementado
 
 - HU 1.1: asignación de camas con State, validación de paciente y adaptador MySQL transaccional.
 - HU 2.1: liberación por alta/traslado, confirmación de limpieza y mantenimiento.
-- HU 3.1: Insumo, validación del evento MedicacionAdministrada, consumidor preparado,
+- HU 3.1: Insumo, validación del evento MedicacionAdministrada, consumidor persistente,
   adaptador con descuento condicionado y consulta de inventario.
 - Controladores, validadores y rutas Express con contratos inyectados para IAM y Admisión.
 - Mapa Vue con filtros, formularios, manejo de conflictos y recarga desde la API.
+- Asignación por DNI: el formulario busca al paciente en Admisión y muestra nombre,
+  apellido y DNI antes de confirmar. GET `/api/recursos-camas/pacientes?dni=...`
+  exige sesión y `camas:asignar`; devuelve sólo ID, nombre, apellido y DNI.
+  Editar el DNI invalida la selección y las respuestas pendientes. El POST conserva
+  `{ idCama, idPaciente }`, con las mismas validaciones y restricciones de unicidad.
 - Inventario Vue por piso y presentación de resultados externos, sin descuentos manuales.
 - Pruebas de dominio, casos de uso, adaptadores, frontend e integración HTTP condicional.
 
@@ -22,7 +28,7 @@ Las escrituras necesitan el proveedor transaccional compartido real. Sin él,
 fallan con `TRANSACCIONES_NO_DISPONIBLES`. El consumidor de inventario exige además
 un registro durable de consumos: sin él falla con `DEDUPLICACION_NO_DISPONIBLE`,
 antes de abrir una transacción o modificar stock. No hay implementaciones simuladas
-en producción. La recepción automática desde Enfermería todavía no está conectada.
+en producción. El servidor compartido ya conecta productor, persistencia y consumidor.
 
 ## Organización
 
@@ -39,96 +45,51 @@ SolicitudAsignacion. Las entidades se utilizan cuando hay reglas de dominio que 
 
 ## HU 3.1: consumo de inventario
 
-La historia original exige descontar insumos del piso cuando Enfermería administra
-medicación: por ejemplo, 50 unidades de Ibuprofeno pasan a 49. Se utiliza la tabla
-existente `insumos(id, nombre, stock, piso)`, sin cambios SQL ni migraciones.
+Integración real de backend con Atención y Enfermería, incorporada selectivamente
+ desde origin/feature/backend-enfermeria (8800d76), sin su servidor independiente.
+La tabla existente consumos_medicacion debe tener id_administracion como PK,
+id_insumo, cantidad, piso y estado (pendiente/procesado/revision). No se crean tablas.
 
-Insumo valida stock entero no negativo, cantidad positiva y coincidencia de piso.
-El piso 0 y los pisos negativos son enteros válidos; un insumo sin piso (NULL) no
-se usa como reemplazo del inventario de un piso. No se elige una fila por nombre.
+- Cantidad representa unidades enteras de inventario por administración, confirmado por el grupo.
+- El piso se obtiene de la única cama activa del paciente y queda guardado al registrar.
+  Sin cama activa se rechaza el registro. No se recalcula el piso si el paciente se traslada.
+- POST /api/administracion-medicacion exige sesión y rol Enfermero; su ID sale de IAM.
+  El GET exige sesión. Se conservan validaciones de indicación, frecuencia y horario.
+- Enfermería bloquea la indicación y repite la búsqueda de dosis administrada en la
+  ventana de ±30 minutos con lectura bloqueada. Se conserva este criterio conservador:
+  no hay identidad persistida por horario programado y puede rechazar dosis contiguas
+  en el límite de sus ventanas. Todos los productores deben respetar ese bloqueo.
+- Administración y consumo pendiente se insertan sobre una única conexión de
+  Database.withTransaction(). Enfermería no actualiza insumos. Si falla una inserción,
+  ambas se revierten. Su HTTP 200 confirma registro clínico, no descuento ya terminado.
 
-Contrato público en `application/ports/MedicacionAdministrada.ts`:
+El servidor inicia un procesador después de comenzar a escuchar. Consulta hasta
+10 pendientes, uno por vez, y programa otro ciclo 5 segundos después de terminar.
+Al cerrar, primero drena HTTP, después detiene y espera el consumidor, y cierra el pool.
+No hay tareas superpuestas, brokers ni otro pool/servidor. Reiniciar recupera pendientes.
 
-```json
-{
-  "tipo": "MedicacionAdministrada",
-  "version": 1,
-  "idEvento": "medicacion-20",
-  "idAdministracion": 20,
-  "idInsumo": 4,
-  "cantidad": 1,
-  "piso": 2
-}
-```
+Cada fila produce MedicacionAdministrada versión 1 con idEvento medicacion:<id_administracion>,
+idAdministracion, idInsumo, cantidad y piso. No se admiten alias nuevos para reintentos.
+El adaptador concreto exige ese ID estable y compara el contenido con la fila persistida.
 
-Enfermería debe emitirlo sólo al confirmar una administración real. idAdministracion
-identifica esa dosis de forma estable; idEvento identifica el evento y se conserva
-en los reintentos. La cantidad representa unidades enteras de stock (no miligramos
-ni la dosis escrita como texto). Enfermería debe acordar la conversión y enviar el
-idInsumo de la fila del piso de consumo, incluso si el paciente luego fue trasladado.
-El contrato es una propuesta para coordinar con el productor, no una integración
-ya implementada en su módulo. El canal interno debe confiar sólo en el productor
-autorizado; comprobar tipo/version no autentica por sí solo un evento.
+ProcesarConsumoInsumo reutiliza MysqlInsumoRepository y el registro persistente:
 
-ProcesarConsumoInsumo recibe y valida el evento, y delega en IInsumoRepository.
-`crearConsumidorConsumos({ database, transacciones, registroConsumos })` exporta
-un callback que devuelve una Promise de ResultadoConsumo. No se crea servidor,
-broker, worker independiente, setTimeout ni suscripción ficticia.
+1. Bloquear el consumo con SELECT FOR UPDATE; un procesado equivalente es duplicado.
+2. Marcar procesado dentro de la transacción y bloquear el insumo.
+3. Validar cantidad, piso y stock; ejecutar UPDATE insumos con stock >= cantidad y piso.
+4. Confirmar la marca y el descuento juntos. Cualquier error revierte ambos.
 
-El adaptador MysqlInsumoRepository ejecuta en una transacción exclusiva:
+Ante stock insuficiente o piso incorrecto, después del rollback el procesador cambia
+pendiente a revision mediante UPDATE condicionado. Esa actualización bloquea la fila
+ y reevalúa su estado, sin pisar un procesado concurrente. Los casos revision no se
+reintentan automáticamente; requieren intervención acordada con el grupo. No se borra
+la administración clínica ni se agregan endpoints de resolución en este alcance.
+Otros fallos se registran y se vuelven a consultar en el siguiente ciclo. Ante un commit
+incierto se relee la fila; no se repite una resta aislada. Los errores no detienen el ciclo.
 
-1. Registrar el consumo mediante RegistroConsumosMysql usando la misma conexión.
-2. Si ya estaba procesado con el mismo contenido, devolver duplicado sin tocar stock.
-3. Leer el insumo con FOR UPDATE y validar las reglas de Insumo.
-4. Ejecutar la resta condicionada y exigir exactamente una fila afectada:
-
-```sql
-UPDATE insumos SET stock = stock - ?
-WHERE id = ? AND piso = ? AND stock >= ?
-```
-
-Los parámetros son cantidad, idInsumo, piso y cantidad, previamente validados.
-El descuento propio no puede producir stock negativo. Registro y descuento deben
-confirmarse juntos; cualquier error debe revertir ambos. No se confirma éxito antes
-del commit ni se reintenta una escritura con resultado incierto desde este módulo.
-
-Resultado: estado descontado/duplicado, idEvento, idAdministracion, idInsumo,
-cantidadDescontada y stockRestante. Un duplicado descuenta 0 y devuelve stockRestante
-null: no inventa el stock histórico ni afirma haberlo vuelto a consultar.
-
-### Deduplicación y entrega asíncrona pendientes
-
-La tabla insumos no registra consumos ni eventos procesados. RegistroConsumosMysql
-es únicamente un contrato pendiente, sin implementación sobre tablas inexistentes.
-Su implementación futura debe garantizar unicidad concurrente por administración
-y por evento, incluso entre procesos y reinicios. Debe comparar administración,
-insumo, cantidad y piso; un reenvío equivalente con otro eventId sigue siendo duplicado.
-Debe asociar esos eventId a la administración. Reutilizar un eventId para otra dosis
-o cambiar el contenido devuelve CONSUMO_INCONSISTENTE, sin nuevo descuento.
-
-No alcanza con consultar primero si existe: registro y unicidad necesitan una
-garantía durable y la misma transacción que el stock. No se utiliza un Set, mapa,
-cache ni la tabla de administraciones de otro módulo como sustituto. El esquema
-necesario se discutirá con el grupo; aquí no se crea ni se ejecuta.
-
-El despachador compartido debe registrar el callback y esperar su Promise antes
-de confirmar entrega. Enfermería necesita publicar de forma durable junto con el
-registro de administración y entregar después del commit para evitar eventos
-perdidos o consumos de administraciones revertidas. Eso requiere coordinación
-con su módulo y la infraestructura, que no se modificaron. Una función async por
-sí sola no garantiza publicación, entrega ni recuperación después de una caída.
-
-Los errores transitorios se devuelven al despachador para su política de reintentos.
-Stock insuficiente, piso incorrecto o datos inconsistentes requieren una incidencia
-operativa; no se reintentan indefinidamente ni revierten una administración clínica.
-El registro no debe marcar el consumo como completado si el descuento falló.
-
-La lectura GET /insumos funciona independientemente de registro y transacciones.
-InventarioView muestra existencias por piso, permite actualizar y admite entradas
-resultadoConsumo/errorConsumo para futuras notificaciones. No hay historial durable
-ni conexión real de esas notificaciones; recargar la página no recupera resultados
-desde insumos. La tabla se actualiza consultando la API, nunca restando localmente.
-La ruta Vue exportada es `/recursos-camas/inventario`; aún debe montarse con el router global.
+Las consultas de inventario y sus formatos HTTP se conservan. El frontend de Enfermería
+actual de esta rama todavía es visual: su conexión a estos endpoints queda pendiente.
+No se ejecutaron administraciones ni descuentos reales como parte de esta integración.
 
 ## Estados
 
@@ -146,8 +107,12 @@ de volver a Libre. Una cama ocupada debe liberarse antes de bloquearse.
 ## Persistencia y concurrencia
 
 Se usan las tablas existentes `camas`, `tipo_cama` y `asignaciones_camas`.
-No se crean tablas ni se ejecutan migraciones. El índice `uq_cama_activa` ya existe;
-no se escribe su columna generada `id_cama_activa`.
+Se conservó `uq_cama_activa` y se agregó, con autorización y respaldo previo,
+`id_paciente_activo` generado + índice único `uq_paciente_activo` en la base local.
+Ambas columnas generadas valen NULL al finalizar la asignación, conservando el historial.
+No se escriben esas columnas desde el código. Otros entornos necesitan también
+`uq_paciente_activo` antes de habilitar asignaciones. Su violación devuelve HTTP 409
+con código `PACIENTE_YA_ASIGNADO` y revierte toda la transacción, incluido el estado de cama.
 
 Cada escritura exige una conexión exclusiva y una única transacción:
 
@@ -196,14 +161,14 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
   manifests ni lockfiles. No se añadieron dependencias.
 - **IAM:** la sesión real y los permisos aprobados ya están conectados al servidor.
   Falta conectar el login visual a su API y proporcionar contexto de permisos a Vue.
-- **Enfermería e inventario:** acordar el evento, entrega durable, registro transaccional
-  de consumos y canal de resultados. Sin ese registro el consumidor no escribe stock.
-- **Admisión:** implementar IPacienteGateway mediante su API pública. La FK sigue
+- **Enfermería e inventario:** backend integrado con pendientes persistidos. Faltan
+  pruebas reales de administración, reinicio y concurrencia y resolución operativa de revision.
+- **Admisión:** gateway integrado con MySQLPacienteRepository.buscarPorId(). La FK sigue
   protegiendo integridad si el paciente desaparece después de la validación.
 - **Altas y traslados:** integrar el comando con el proceso clínico real. La liberación
   operativa no registra un alta médica ni asigna el destino de un traslado.
 - **Arranque:** rutas protegidas montadas, proxy /api configurado y errores globales JSON.
-  Faltan credenciales locales para comprobar lecturas y escrituras reales.
+  Asignación montada con Admisión; su prueba completa y concurrente en MySQL real sigue pendiente.
 - **Frontend:** rutas en src/router/index.ts; login visual pendiente de IAM.
 - **Monitores:** actualización manual o posterior al comando; no hay eventos durables
   ni actualización en tiempo real entre clientes.
@@ -211,13 +176,12 @@ Sus errores se propagan al despachador. No hay un botón de descuento manual.
   motivo ni fechas de limpieza/mantenimiento. Esos datos no se guardan ni se simulan.
 - **Versionado e idempotencia:** no hay versión/tarea persistida para reconocer todos
   los ciclos que vuelven al mismo estado ni registro durable de solicitudes repetidas.
-- **Asignaciones por paciente:** el esquema garantiza una ocupación activa por cama,
-  pero no impide varias camas para un paciente; requiere acuerdo si se exige esa regla.
+- **Asignaciones por paciente:** unicidad activa protegida por `uq_paciente_activo` en la base local.
+  No se ejecutaron asignaciones de prueba contra MySQL real.
 
 ## Verificación
 
-Resultado de la integración: **305 pruebas aprobadas, sin omisiones** (17 archivos).
-Suite desde la raíz: **550 pruebas aprobadas** (30 archivos).
+Resultado actual del módulo: **366 pruebas aprobadas, sin omisiones** (20 archivos).
 TypeScript del módulo, frontend y servidor comprobado. Concurrencia MySQL real pendiente.
 ESLint global detecta una variable sin uso preexistente en Atención y Enfermería; no se modifica.
 

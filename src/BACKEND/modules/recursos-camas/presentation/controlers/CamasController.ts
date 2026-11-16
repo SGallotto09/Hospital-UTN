@@ -6,6 +6,7 @@ import { validarAsignacion } from '../validators/asignacionValidator.js'
 import type { TransicionarCama } from '../../application/use-cases/TransicionarCama.js'
 import type { AccionCama } from '../../domain/repositories/ITransicionCamaRepository.js'
 import { validarTransicion } from '../validators/transicionValidator.js'
+import type { IPacienteGateway } from '../../application/ports/IPacienteGateway.js'
 
 export interface ActorRecursosCamas {
   idUsuario: number
@@ -21,6 +22,7 @@ export class CamasController {
     private readonly asignarCama: AsignarCama | undefined,
     private readonly obtenerActor: ObtenerActor,
     private readonly transicionarCama: TransicionarCama | undefined,
+    private readonly pacientes?: IPacienteGateway,
   ) {}
 
   private exigirPermiso(req: Request, permiso: string): ActorRecursosCamas {
@@ -38,6 +40,25 @@ export class CamasController {
     try {
       this.exigirPermiso(req, 'camas:consultar')
       res.status(200).json({ camas: await this.consultaCamas.listar() })
+    } catch (error) {
+      next(error)
+    }
+  }
+
+  buscarPaciente = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      this.exigirPermiso(req, 'camas:asignar')
+      const dni = req.query.dni
+      if (typeof dni !== 'string' || !dni.trim()) {
+        throw new ErrorRecursosCamas('DATOS_INVALIDOS', 'Ingresá un DNI válido.')
+      }
+      if (!this.pacientes) throw new Error('No está integrada la consulta de pacientes.')
+      const paciente = await this.pacientes.buscarPorDni(dni.trim())
+      if (!paciente) {
+        throw new ErrorRecursosCamas('PACIENTE_NO_ENCONTRADO', 'No se encontró un paciente con ese DNI.')
+      }
+      res.set('Cache-Control', 'no-store')
+      res.status(200).json({ paciente })
     } catch (error) {
       next(error)
     }

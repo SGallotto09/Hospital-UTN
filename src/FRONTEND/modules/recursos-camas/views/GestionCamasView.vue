@@ -144,6 +144,7 @@ onMounted(cargar)
         :key="seleccion.cama.id"
         :cama="seleccion.cama"
         :enviando="enviando"
+        :buscar-paciente="api.buscarPacientePorDni"
         @confirmar="asignar"
         @cancelar="seleccion = null"
       />

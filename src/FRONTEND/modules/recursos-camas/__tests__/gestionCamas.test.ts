@@ -31,15 +31,16 @@ function crearApi(): CamasApi {
   return {
     listar: vi.fn().mockResolvedValue([cama]),
     asignar: vi.fn().mockResolvedValue(asignacion),
+    buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),
     transicionar: vi.fn(),
   }
 }
 
 describe('formulario de asignación', () => {
   it.each(['', '0', '-2', '1.5', '2e2', '2147483648', 'abc'])(
-    'no confirma identificador inválido %s',
+    'no confirma sin buscar y seleccionar un paciente: %s',
     async (valor) => {
-      const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false } })
+      const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false, buscarPaciente: vi.fn() } })
       await wrapper.get('input').setValue(valor)
       await wrapper.get('form').trigger('submit')
       expect(wrapper.emitted('confirmar')).toBeUndefined()
@@ -48,7 +49,113 @@ describe('formulario de asignación', () => {
   )
 })
 
+describe('búsqueda por DNI en el formulario', () => {
+  const paciente = { id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }
+
+  it('muestra los datos, confirma el ID y borra la selección al editar el DNI', async () => {
+    const buscarPaciente = vi.fn().mockResolvedValue(paciente)
+    const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false, buscarPaciente } })
+    await wrapper.get('input').setValue(paciente.dni)
+    await wrapper.get('button[type="button"]').trigger('click')
+    await flushPromises()
+    expect(buscarPaciente).toHaveBeenCalledExactlyOnceWith(paciente.dni)
+    expect(wrapper.get('[role="status"]').text()).toContain('Ana Prueba')
+    expect(wrapper.get('[role="status"]').text()).toContain(paciente.dni)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('confirmar')).toEqual([[8]])
+    await wrapper.get('input').setValue('87654321')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('confirmar')).toEqual([[8]])
+    wrapper.unmount()
+  })
+
+  it.each(['resuelve', 'rechaza'])('descarta una búsqueda anterior que %s, incluso si se vuelve al mismo DNI', async resultado => {
+    let resolver!: (encontrado: typeof paciente) => void
+    let rechazar!: (error: Error) => void
+    const buscarPaciente = vi.fn()
+      .mockImplementationOnce(() => new Promise((resolve, reject) => { resolver = resolve; rechazar = reject }))
+      .mockResolvedValueOnce(paciente)
+    const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false, buscarPaciente } })
+    await wrapper.get('input').setValue(paciente.dni)
+    await wrapper.get('button[type="button"]').trigger('click')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('input').setValue('87654321')
+    await wrapper.get('input').setValue(paciente.dni)
+    await wrapper.get('button[type="button"]').trigger('click')
+    await flushPromises()
+    if (resultado === 'resuelve') resolver({ ...paciente, id: 99, nombre: 'Respuesta anterior' })
+    else rechazar(new Error('Error anterior'))
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('Respuesta anterior')
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('confirmar')).toEqual([[8]])
+    wrapper.unmount()
+  })
+
+  it.each(['No se encontró un paciente con ese DNI.', 'No se pudo conectar.'])(
+    'muestra el fallo de búsqueda sin habilitar confirmación: %s', async mensaje => {
+      const buscarPaciente = vi.fn().mockRejectedValue(new Error(mensaje))
+      const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false, buscarPaciente } })
+      await wrapper.get('input').setValue(paciente.dni)
+      await wrapper.get('button[type="button"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.get('[role="alert"]').text()).toBe(mensaje)
+      await wrapper.get('form').trigger('submit')
+      expect(wrapper.emitted('confirmar')).toBeUndefined()
+      wrapper.unmount()
+    },
+  )
+
+  it('no busca un DNI vacío', async () => {
+    const buscarPaciente = vi.fn()
+    const wrapper = mount(AsignarCamaForm, { props: { cama, enviando: false, buscarPaciente } })
+    await wrapper.get('input').setValue('   ')
+    await wrapper.get('button[type="button"]').trigger('click')
+    expect(buscarPaciente).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+})
+
 describe('vista integrada con servicio inyectado', () => {
+  it('envía en el POST el ID recuperado por búsqueda, nunca el DNI numérico', async () => {
+    const pacienteEncontrado = { id: 7, nombre: 'Ana', apellido: 'Prueba', dni: '35678901' }
+    const solicitar = vi.fn<typeof fetch>(async (entrada, opciones) => {
+      const url = String(entrada)
+      let datos: unknown
+      if (url === '/api/recursos-camas/camas') {
+        datos = { camas: [{ ...cama, id: 2 }] }
+      } else if (url === '/api/recursos-camas/pacientes?dni=35678901') {
+        datos = { paciente: pacienteEncontrado }
+      } else if (url === '/api/recursos-camas/asignaciones' && opciones?.method === 'POST') {
+        datos = { asignacion: { ...asignacion, idCama: 2, idPaciente: 7 } }
+      } else {
+        throw new Error(`Solicitud inesperada: ${url}`)
+      }
+      return new Response(JSON.stringify(datos), {
+        status: opciones?.method === 'POST' ? 201 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    })
+    const api = crearCamasApi('/api/recursos-camas', solicitar)
+    const wrapper = mount(GestionCamasView, { props: { api } })
+    await flushPromises()
+    await wrapper.get('article button').trigger('click')
+    await wrapper.get('#paciente-dni').setValue(pacienteEncontrado.dni)
+    await wrapper.findAll('button').find(boton => boton.text() === 'Buscar paciente')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="status"]').text()).toContain('DNI: 35678901')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    const escrituras = solicitar.mock.calls.filter(([, opciones]) => opciones?.method === 'POST')
+    expect(escrituras).toHaveLength(1)
+    expect(escrituras[0]?.[0]).toBe('/api/recursos-camas/asignaciones')
+    expect(JSON.parse(String(escrituras[0]?.[1]?.body))).toEqual({ idCama: 2, idPaciente: 7 })
+    wrapper.unmount()
+  })
+
   it('mantiene un único formulario al alternar asignación y mantenimiento', async () => {
     const api = crearApi()
     const wrapper = mount(GestionCamasView, { props: { api } })
@@ -74,13 +181,13 @@ describe('vista integrada con servicio inyectado', () => {
     const wrapper = mount(GestionCamasView, { props: { api } })
     await flushPromises()
     await wrapper.get('article button').trigger('click')
-    await wrapper.get('form button[type="button"]').trigger('click')
+    await wrapper.findAll('form button').find(boton => boton.text() === 'Cancelar')!.trigger('click')
     expect(wrapper.find('form').exists()).toBe(false)
     const bloquear = wrapper
       .findAll('button')
       .find((boton) => boton.text() === 'Bloquear por mantenimiento')!
     await bloquear.trigger('click')
-    await wrapper.get('form button[type="button"]').trigger('click')
+    await wrapper.findAll('form button').find(boton => boton.text() === 'Cancelar')!.trigger('click')
     expect(wrapper.find('form').exists()).toBe(false)
     expect(api.asignar).not.toHaveBeenCalled()
     expect(api.transicionar).not.toHaveBeenCalled()
@@ -91,7 +198,9 @@ describe('vista integrada con servicio inyectado', () => {
     const wrapper = mount(GestionCamasView, { props: { api } })
     await flushPromises()
     await wrapper.get('article button').trigger('click')
-    await wrapper.get('input').setValue('8')
+    await wrapper.get('input').setValue('12345678')
+    await wrapper.findAll('button').find(boton => boton.text() === 'Buscar paciente')!.trigger('click')
+    await flushPromises()
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(api.asignar).toHaveBeenCalledWith(101, 8)
@@ -112,7 +221,9 @@ describe('vista integrada con servicio inyectado', () => {
     const wrapper = mount(GestionCamasView, { props: { api } })
     await flushPromises()
     await wrapper.get('article button').trigger('click')
-    await wrapper.get('input').setValue('8')
+    await wrapper.get('input').setValue('12345678')
+    await wrapper.findAll('button').find(boton => boton.text() === 'Buscar paciente')!.trigger('click')
+    await flushPromises()
     await wrapper.get('form').trigger('submit')
     await wrapper.get('form').trigger('submit')
     expect(api.asignar).toHaveBeenCalledTimes(1)
@@ -130,7 +241,9 @@ describe('vista integrada con servicio inyectado', () => {
     const wrapper = mount(GestionCamasView, { props: { api } })
     await flushPromises()
     await wrapper.get('article button').trigger('click')
-    await wrapper.get('input').setValue('8')
+    await wrapper.get('input').setValue('12345678')
+    await wrapper.findAll('button').find(boton => boton.text() === 'Buscar paciente')!.trigger('click')
+    await flushPromises()
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toContain('Revisá el estado actualizado')
@@ -151,6 +264,15 @@ describe('vista integrada con servicio inyectado', () => {
 })
 
 describe('cliente HTTP', () => {
+  it('busca por DNI codificado usando las cookies existentes', async () => {
+    const paciente = { id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12 345' }
+    const solicitar = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({ paciente }), {
+      headers: { 'Content-Type': 'application/json' },
+    }))
+    await expect(crearCamasApi('/api/recursos-camas', solicitar).buscarPacientePorDni(paciente.dni))
+      .resolves.toEqual(paciente)
+    expect(solicitar).toHaveBeenCalledExactlyOnceWith('/api/recursos-camas/pacientes?dni=12%20345', { credentials: 'same-origin' })
+  })
   it.each([401, 403, 409, 503])(
     'conserva el estado HTTP %s y no reintenta la escritura',
     async (status) => {

@@ -13,9 +13,14 @@ import { Database } from "./database/connectionDB.js";
 import session from "express-session";
 import "dotenv/config";
 import { verificarSesion } from "./modules/IAM/infraestructure/middlewares/verificarSesion.js";
-import { crearModuloRecursosCamas } from "./modules/recursos-camas/recursosCamas.module.js";
+import { crearModuloRecursosCamas, crearConsumidorConsumos } from "./modules/recursos-camas/recursosCamas.module.js";
 import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from "./modules/recursos-camas/infraestructure/api/obtenerActorSesion.js";
 import { crearProveedorTransacciones } from "./modules/recursos-camas/infraestructure/database/ContratosMysql.js";
+import { MySQLPacienteRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLPacienteRepository.js";
+import { crearPacienteGatewayAdmision } from "./modules/recursos-camas/infraestructure/crearPacienteGatewayAdmision.js";
+import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
+import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
+import { iniciarProcesadorConsumos } from "./modules/recursos-camas/infraestructure/procesarConsumosPendientes.js";
 
 for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
     if (!process.env[nombre]?.trim()) throw new Error(`Falta configurar ${nombre}`);
@@ -66,11 +71,17 @@ app.use("/api/auth", authRoutes.obtenerRouter());
 app.use("/api/auth", registroRoutes.obtenerRouter());
 
 const database = Database.getInstance();
+const transacciones = crearProveedorTransacciones(database);
+const registroConsumos = crearRegistroConsumosMysql();
+
+app.use("/api/administracion-medicacion", verificarSesion, administracionMedicacionRoutes);
 
 app.use("/api/recursos-camas", verificarSesion, crearModuloRecursosCamas({
     database,
     obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),
-    transacciones: crearProveedorTransacciones(database),
+    transacciones,
+    registroConsumos,
+    pacientes: crearPacienteGatewayAdmision(new MySQLPacienteRepository()),
 }));
 
 app.use((_req, res) => {
@@ -95,13 +106,16 @@ if (!await database.probarConexion()) {
     await database.cerrar();
     throw new Error("No se pudo iniciar el servidor: MySQL no está disponible");
 }
+let detenerProcesador: (() => Promise<void>) | undefined;
 const servidor = app.listen(PORT, () => {
+    detenerProcesador = iniciarProcesadorConsumos(database,
+        crearConsumidorConsumos({ database, transacciones, registroConsumos }));
     console.log(`Servidor backend funcionando en http://localhost:${PORT}`);
 });
 servidor.on("error", (error) => {
     console.error("No se pudo iniciar el servidor HTTP", error);
     process.exitCode = 1;
-    void database.cerrar().catch((errorCierre: unknown) => {
+    void (detenerProcesador?.() ?? Promise.resolve()).then(() => database.cerrar()).catch((errorCierre: unknown) => {
         console.error("No se pudo cerrar MySQL", errorCierre);
     });
 });
@@ -110,7 +124,7 @@ function cerrarServidor() {
     if (cerrando) return;
     cerrando = true;
     servidor.close(() => {
-        void database.cerrar().catch((error: unknown) => {
+        void (detenerProcesador?.() ?? Promise.resolve()).then(() => database.cerrar()).catch((error: unknown) => {
             console.error("No se pudo cerrar MySQL", error);
             process.exitCode = 1;
         });

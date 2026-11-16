@@ -3,6 +3,8 @@ import { createRequire } from 'node:module'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Request, Response } from 'express'
+import { crearPacienteGatewayAdmision } from '../../infraestructure/crearPacienteGatewayAdmision.js'
+import { Paciente } from '../../../admicion-turnos/domain/entities/Paciente.js'
 import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from '../../infraestructure/api/obtenerActorSesion.js'
 
 const require = createRequire(import.meta.url)
@@ -23,6 +25,13 @@ describe.skipIf(!dependenciasDisponibles)(
     const query = vi.fn().mockResolvedValue([[], []])
     const execute = vi.fn()
     const ejecutar = vi.fn()
+    const buscarPorId = vi.fn()
+    const buscarPorDni = vi.fn()
+    const paciente = Paciente.reconstituir({
+      id: 8, nombre: 'Prueba', apellido: 'Prueba', dni: '12345678',
+      fechaNacimiento: '2000-01-01', genero: 'Prueba', telefono: '12345678',
+      email: 'prueba@example.test', obraSocial: 1,
+    })
     const registrar = vi.fn(async (_req: Request, res: Response) => { res.sendStatus(201) })
 
     beforeAll(async () => {
@@ -64,6 +73,15 @@ describe.skipIf(!dependenciasDisponibles)(
           return operacion({ execute })
         } },
       }))
+      app.use('/api/con-admision', verificarSesion, crearModuloRecursosCamas({
+        database: { query },
+        pacientes: crearPacienteGatewayAdmision({ buscarPorId, buscarPorDni }),
+        obtenerActor: crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol),
+        transacciones: { ejecutar: async operacion => {
+          ejecutar()
+          return operacion({ execute })
+        } },
+      }))
       // Política sólo de prueba. La correspondencia productiva todavía NO fue aprobada.
       app.use(
         '/api/prueba/lectura',
@@ -96,6 +114,8 @@ describe.skipIf(!dependenciasDisponibles)(
       query.mockClear()
       ejecutar.mockClear()
       execute.mockReset()
+      buscarPorId.mockReset().mockResolvedValue(paciente)
+      buscarPorDni.mockReset().mockResolvedValue(paciente)
       registrar.mockClear()
     })
     afterAll(async () => {
@@ -115,6 +135,88 @@ describe.skipIf(!dependenciasDisponibles)(
       expect(cookie).toBeTruthy()
       return cookie!
     }
+
+    it.each([
+      ['Administrador', 200], ['Recepcionista', 200], ['Médico', 403],
+      ['Enfermero', 403], ['Limpieza', 403], ['', 401],
+    ])('consulta DNI para %s: %i', async (rol, estado) => {
+      const cookie = rol ? await cookieSesion(rol) : ''
+      const respuesta = await fetch(`${url}/api/con-admision/pacientes?dni=12345678`, { headers: { Cookie: cookie } })
+      expect(respuesta.status).toBe(estado)
+      if (estado === 200) {
+        expect(await respuesta.json()).toEqual({ paciente: { id: 8, nombre: 'Prueba', apellido: 'Prueba', dni: '12345678' } })
+        expect(buscarPorDni).toHaveBeenCalledExactlyOnceWith('12345678')
+      } else expect(buscarPorDni).not.toHaveBeenCalled()
+    })
+
+    it.each(['', '?dni=', '?dni=%20', '?dni=1&dni=2', '?dni[x]=1'])(
+      'rechaza un DNI inválido: %s', async queryString => {
+        const cookie = await cookieSesion('Administrador')
+        const respuesta = await fetch(`${url}/api/con-admision/pacientes${queryString}`, { headers: { Cookie: cookie } })
+        expect(respuesta.status).toBe(400)
+        expect(buscarPorDni).not.toHaveBeenCalled()
+      },
+    )
+
+    it('responde 404 para un DNI inexistente', async () => {
+      buscarPorDni.mockResolvedValue(null)
+      const cookie = await cookieSesion('Administrador')
+      const respuesta = await fetch(`${url}/api/con-admision/pacientes?dni=12345678`, { headers: { Cookie: cookie } })
+      expect(respuesta.status).toBe(404)
+      expect(ejecutar).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['Administrador', 201], ['Recepcionista', 201], ['Médico', 403],
+      ['Enfermero', 403], ['Limpieza', 403],
+    ])('asignación con Admisión para %s: %i', async (rol, estado) => {
+      execute.mockResolvedValueOnce([[{ id: 1, estado: 'Libre', piso: 1, habitacion: 101, id_tipo_cama: 1 }], []])
+        .mockResolvedValueOnce([[], []])
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+        .mockResolvedValueOnce([{ insertId: 20 }, []])
+        .mockResolvedValueOnce([[{ fecha_ingreso: new Date('2026-11-16T12:00:00Z') }], []])
+      const cookie = await cookieSesion(rol)
+      const respuesta = await fetch(`${url}/api/con-admision/asignaciones`, {
+        method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idCama: 1, idPaciente: 8 }),
+      })
+      expect(respuesta.status).toBe(estado)
+      if (estado === 201) {
+        expect(buscarPorId).toHaveBeenCalledExactlyOnceWith(8)
+        expect(await respuesta.json()).toMatchObject({ asignacion: { id: 20, idPaciente: 8, idUsuarioAsignador: 7 } })
+      } else {
+        expect(buscarPorId).not.toHaveBeenCalled()
+        expect(ejecutar).not.toHaveBeenCalled()
+      }
+    })
+
+    it('devuelve 404 sin abrir transacción si Admisión no encuentra el paciente', async () => {
+      buscarPorId.mockResolvedValue(null)
+      const cookie = await cookieSesion('Administrador')
+      const respuesta = await fetch(`${url}/api/con-admision/asignaciones`, {
+        method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idCama: 1, idPaciente: 8 }),
+      })
+      expect(respuesta.status).toBe(404)
+      expect(ejecutar).not.toHaveBeenCalled()
+    })
+
+    it('devuelve 409 con un mensaje claro si el paciente ya tiene cama', async () => {
+      execute.mockResolvedValueOnce([[{ id: 1, estado: 'Libre', piso: 1, habitacion: 101, id_tipo_cama: 1 }], []])
+        .mockResolvedValueOnce([[], []])
+        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+        .mockRejectedValueOnce(Object.assign(new Error("Duplicate entry for key 'uq_paciente_activo'"), { code: 'ER_DUP_ENTRY' }))
+      const cookie = await cookieSesion('Administrador')
+      const respuesta = await fetch(`${url}/api/con-admision/asignaciones`, {
+        method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idCama: 1, idPaciente: 8 }),
+      })
+      expect(respuesta.status).toBe(409)
+      expect(await respuesta.json()).toEqual({
+        codigo: 'PACIENTE_YA_ASIGNADO',
+        mensaje: 'El paciente ya tiene una cama asignada. Actualizá el mapa.',
+      })
+    })
 
     it.each([['', 401], ['Limpieza', 403], ['Recepcionista', 403], ['Administrador', 201]])(
       'registro protegido para %s: %i', async (rol, estado) => {

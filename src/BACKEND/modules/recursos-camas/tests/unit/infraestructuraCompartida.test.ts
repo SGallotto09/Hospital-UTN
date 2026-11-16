@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Request } from 'express'
 import { crearObtenerActorDesdeSesion, permisosRecursosCamasPorRol } from '../../infraestructure/api/obtenerActorSesion.js'
 import { RegistrarUsuario } from '../../../IAM/use-cases/RegistrarUsuario.js'
+import { MysqlAsignacionCamaRepository } from '../../infraestructure/repositories/MysqlAsignacionCamaRepository.js'
+import { crearProveedorTransacciones } from '../../infraestructure/database/ContratosMysql.js'
 
 const mocks = vi.hoisted(() => {
   const conexion = {
     beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(),
-    release: vi.fn(), destroy: vi.fn(), ping: vi.fn(),
+    release: vi.fn(), destroy: vi.fn(), ping: vi.fn(), execute: vi.fn(),
   }
   return { conexion, pool: { getConnection: vi.fn(), execute: vi.fn(), end: vi.fn() } }
 })
@@ -59,6 +61,24 @@ describe('pool compartido', () => {
     await expect(Database.getInstance().withTransaction(async () => { throw new Error('operación') })).rejects.toBeInstanceOf(AggregateError)
     expect(mocks.conexion.destroy).toHaveBeenCalledOnce()
     expect(mocks.conexion.release).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['uq_cama_activa', 'CAMA_NO_DISPONIBLE'],
+    ['uq_paciente_activo', 'PACIENTE_YA_ASIGNADO'],
+  ])('revierte también el cambio de estado ante %s', async (indice, codigo) => {
+    mocks.conexion.execute.mockResolvedValueOnce([[{
+      id: 1, estado: 'Libre', piso: 1, habitacion: 101, id_tipo_cama: 1,
+    }], []]).mockResolvedValueOnce([[], []])
+      .mockResolvedValueOnce([{ affectedRows: 1 }, []])
+      .mockRejectedValueOnce(Object.assign(new Error(`Duplicate entry for key '${indice}'`), { code: 'ER_DUP_ENTRY' }))
+    const repo = new MysqlAsignacionCamaRepository(crearProveedorTransacciones(Database.getInstance()))
+    await expect(repo.asignarSiDisponible({ idCama: 1, idPaciente: 8, idUsuarioAsignador: 7 }, cama => cama.ocupar()))
+      .rejects.toMatchObject({ codigo })
+    expect(mocks.conexion.execute.mock.calls[2]?.[0]).toContain('UPDATE camas')
+    expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+    expect(mocks.conexion.commit).not.toHaveBeenCalled()
+    expect(mocks.conexion.release).toHaveBeenCalledOnce()
   })
   it('libera la conexión incluso si falla ping', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})

@@ -33,7 +33,15 @@ export interface ResultadoTransicion {
   fechaEgreso: string | null
 }
 
+export interface PacienteParaAsignacion {
+  id: number
+  nombre: string
+  apellido: string
+  dni: string
+}
+
 export interface CamasApi {
+  buscarPacientePorDni(dni: string): Promise<PacienteParaAsignacion>
   listar(): Promise<Cama[]>
   asignar(idCama: number, idPaciente: number): Promise<Asignacion>
   transicionar(idCama: number, solicitud: SolicitudTransicion): Promise<ResultadoTransicion>
@@ -109,6 +117,11 @@ export function crearCamasApi(
   solicitar: typeof fetch = (...args) => fetch(...args),
 ): CamasApi {
   return {
+    async buscarPacientePorDni(dni) {
+      return (await enviar<{ paciente: PacienteParaAsignacion }>(
+        `${baseUrl}/pacientes?dni=${encodeURIComponent(dni)}`, solicitar,
+      )).paciente
+    },
     async listar() {
       return (await enviar<{ camas: Cama[] }>(`${baseUrl}/camas`, solicitar)).camas
     },

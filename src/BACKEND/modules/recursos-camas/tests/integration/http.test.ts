@@ -74,7 +74,7 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
           )
         },
       },
-      { existe: async () => true },
+      { existe: async () => true, buscarPorDni: async () => null },
     )
     const transicionar = new TransicionarCama({
       async transicionar(solicitud, aplicar) {

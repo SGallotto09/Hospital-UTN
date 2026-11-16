@@ -52,7 +52,7 @@ describe('HU 1.1: dominio y aplicación', () => {
       ocupar(cama)
       return new AsignacionCama(1, 101, 8, 3, new Date('2026-11-15T12:00:00Z'))
     })
-    const caso = new AsignarCama({ asignarSiDisponible }, { existe: async () => true })
+    const caso = new AsignarCama({ asignarSiDisponible }, { existe: async () => true, buscarPorDni: async () => null })
     expect(await caso.ejecutar(solicitud)).toMatchObject({ id: 1, idCama: 101, idPaciente: 8 })
     expect(cama.estado).toBe('Ocupada')
     expect(asignarSiDisponible).toHaveBeenCalledOnce()
@@ -60,7 +60,7 @@ describe('HU 1.1: dominio y aplicación', () => {
 
   it('no persiste un paciente inexistente', async () => {
     const asignarSiDisponible = vi.fn()
-    const caso = new AsignarCama({ asignarSiDisponible }, { existe: async () => false })
+    const caso = new AsignarCama({ asignarSiDisponible }, { existe: async () => false, buscarPorDni: async () => null })
     await expect(caso.ejecutar(solicitud)).rejects.toMatchObject({
       codigo: 'PACIENTE_NO_ENCONTRADO',
     })
@@ -71,7 +71,7 @@ describe('HU 1.1: dominio y aplicación', () => {
     'rechaza id inválido %s antes de consultar',
     async (id) => {
       const existe = vi.fn()
-      const caso = new AsignarCama({ asignarSiDisponible: vi.fn() }, { existe })
+      const caso = new AsignarCama({ asignarSiDisponible: vi.fn() }, { existe, buscarPorDni: async () => null })
       await expect(caso.ejecutar({ ...solicitud, idCama: id })).rejects.toMatchObject({
         codigo: 'DATOS_INVALIDOS',
       })
