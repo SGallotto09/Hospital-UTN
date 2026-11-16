@@ -12,7 +12,7 @@ export class ObtenerPacientesInternados {
             if(paciente.presion_arterial === null || paciente.frecuencia_cardiaca === null || paciente.temperatura === null){
                 return {
                     ...paciente,
-                    estado: 'Sin registros' as const
+                    estado: 'Sin registro' as const
                 };
             }
             const requiereAtencion = Number(paciente.temperatura) > 39;

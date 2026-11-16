@@ -1,5 +1,6 @@
 
 import type { AdministracionMedicacionRepository } from '../../domain/repositories/administracion_medicacion_repository.js';
+import { event_bus } from '../../../../events/event_bus.js';
 
 export class AdministrarMedicacion {
 
@@ -31,14 +32,25 @@ export class AdministrarMedicacion {
             throw new Error('La cantidad administrada debe ser un entero positivo');
         }
 
-        const indicacion = await this.administracion_medicacion_repository.obtenerDatosIndicacion(id_indicacion_medica);
+        const indicacion =
+            await this.administracion_medicacion_repository.obtenerDatosIndicacion(
+                id_indicacion_medica
+            );
 
         if (indicacion === null) {
             throw new Error('No se encontró la indicación médica');
         }
 
-        const inicio = new Date(`${indicacion.fecha}T${indicacion.hora_inicio}`);
+        if (!Number.isSafeInteger(indicacion.cantidad) || indicacion.cantidad <= 0) {
+            throw new Error('La cantidad indicada debe ser un entero positivo');
+        }
 
+        const cantidad_realmente_administrada = cantidad_administrada ?? indicacion.cantidad;
+        if (cantidad_realmente_administrada !== indicacion.cantidad) {
+            throw new Error('La cantidad administrada debe coincidir con la cantidad indicada');
+        }
+
+        const inicio = new Date(`${indicacion.fecha}T${indicacion.hora_inicio}`);
         const frecuencia = indicacion.frecuencia_horas;
 
         if (Number.isNaN(inicio.getTime()) || !Number.isInteger(frecuencia) || frecuencia <= 0) {
@@ -47,7 +59,6 @@ export class AdministrarMedicacion {
 
         const intervalo = frecuencia * 60 * 60 * 1000;
         const diferencia = horario_programado.getTime() - inicio.getTime();
-
         const numero_dosis = Math.round(diferencia / intervalo);
 
         if (numero_dosis < 0 || Math.abs(diferencia - numero_dosis * intervalo) > 1000) {
@@ -57,8 +68,9 @@ export class AdministrarMedicacion {
         }
 
         const ahora = new Date();
-
-        const diferencia_horario = Math.abs(ahora.getTime() - horario_programado.getTime());
+        const diferencia_horario = Math.abs(
+            ahora.getTime() - horario_programado.getTime()
+        );
 
         if (diferencia_horario > 30 * 60 * 1000) {
             throw new Error(
@@ -67,22 +79,29 @@ export class AdministrarMedicacion {
         }
 
         const ya_administrada =
-            await this.administracion_medicacion_repository
-                .existeDosisAdministrada(
-                    id_indicacion_medica,
-                    horario_programado
-                );
+            await this.administracion_medicacion_repository.existeDosisAdministrada(
+                id_indicacion_medica,
+                horario_programado
+            );
 
         if (ya_administrada) {
             throw new Error('Esta dosis ya fue administrada');
         }
 
-        return this.administracion_medicacion_repository.administrar(
-            id_indicacion_medica,
-            id_enfermero,
-            ahora,
-            horario_programado,
-            cantidad_administrada
-        );
+        const id_administracion_medicacion =
+            await this.administracion_medicacion_repository.administrar(
+                id_indicacion_medica,
+                id_enfermero,
+                ahora,
+                horario_programado,
+                cantidad_realmente_administrada
+            );
+
+        event_bus.emitir_medicacion_administrada({
+            idAdministracionMedicacion: id_administracion_medicacion,
+            cantidadAdministrada: cantidad_realmente_administrada
+        });
+
+        return id_administracion_medicacion;
     }
 }
