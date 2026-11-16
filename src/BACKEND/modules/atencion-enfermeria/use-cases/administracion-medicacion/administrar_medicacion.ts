@@ -83,7 +83,8 @@ export class AdministrarMedicacion {
                 id_indicacion_medica,
                 id_enfermero,
                 ahora,
-                cantidad_administrada
+                cantidad_administrada,
+                horario_programado
             );
 
             event_bus.emitir_medicacion_administrada({

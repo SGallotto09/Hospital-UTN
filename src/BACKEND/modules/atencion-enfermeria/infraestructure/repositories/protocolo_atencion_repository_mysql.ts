@@ -36,6 +36,10 @@ export class ProtocoloAtencionRepositoryMysql implements ProtocoloAtencionReposi
         } catch (error) {
             try {
                 await this.db.query(
+                    `DELETE FROM tareas_enfermeria WHERE id_protocolo = ?`,
+                    [id_protocolo]
+                );
+                await this.db.query(
                     `DELETE FROM protocolos_atencion WHERE id = ?`,
                     [id_protocolo]
                 );

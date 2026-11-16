@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { pacienteInternadoController } from './paciente_internado_dependencies.js';
+import { verificarRol } from '../../../../IAM/infraestructure/middlewares/verificarRol.js';
 
 const router: Router = Router();
 
-router.get('/', (req, res) =>
+router.get('/', verificarRol(['Enfermero']), (req, res) =>
     pacienteInternadoController.obtenerTodos(req, res)
 );
 

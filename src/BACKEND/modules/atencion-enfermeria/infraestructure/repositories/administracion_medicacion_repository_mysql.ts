@@ -45,11 +45,16 @@ async administrar(
     id_indicacion_medica: number,
     id_enfermero: number,
     fecha_hora: Date,
-    cantidad_administrada: number
+    cantidad_administrada: number,
+    horario_programado: Date
 ): Promise<number> {
 
     if (!Number.isFinite(cantidad_administrada) || cantidad_administrada <= 0) {
         throw new Error('La cantidad administrada debe ser mayor a cero.');
+    }
+
+    if (await this.existeDosisAdministrada(id_indicacion_medica, horario_programado)) {
+        throw new Error('Esta dosis ya fue administrada');
     }
 
     const sqlBuscar = `
@@ -101,14 +106,30 @@ async administrar(
         VALUES (?, ?, ?, ?)
     `;
 
-    const [resultado_insertar]: any = await this.db.query(sqlInsertar, [
-        id_indicacion_medica,
-        'Administrada',
-        id_enfermero,
-        fecha_hora
-    ]);
+    try {
+        const [resultado_insertar]: any = await this.db.query(sqlInsertar, [
+            id_indicacion_medica,
+            'Administrada',
+            id_enfermero,
+            fecha_hora
+        ]);
 
-    return resultado_insertar.insertId;
+        return resultado_insertar.insertId;
+    } catch (error) {
+        try {
+            await this.db.query(
+                `UPDATE insumos SET stock = stock + ? WHERE id = ?`,
+                [cantidad_administrada, indicacion.id_insumo]
+            );
+        } catch (error_compensacion) {
+            console.error(
+                'Falló el INSERT de administración y también la compensación del stock:',
+                error_compensacion
+            );
+        }
+
+        throw error;
+    }
 }
 
     

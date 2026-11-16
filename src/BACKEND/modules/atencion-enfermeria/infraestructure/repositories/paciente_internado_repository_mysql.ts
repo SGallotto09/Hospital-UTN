@@ -49,7 +49,7 @@ export class PacienteInternadoRepositoryMysql implements PacienteInternadoReposi
                 )
                 
             `;
-            const termino = `%${buscar.trim()}`;
+            const termino = `%${buscar.trim()}%`;
 
             valores.push(termino, termino, termino, termino);
         }
