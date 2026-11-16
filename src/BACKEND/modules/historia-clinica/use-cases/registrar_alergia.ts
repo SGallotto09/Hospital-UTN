@@ -1,0 +1,49 @@
+import type {
+    AlergiaRepository,
+    DatosNuevaAlergia
+} from '../domain/repositories/alergia_repository.js';
+
+import type { Alergia } from '../domain/entities/alergia.js';
+
+export class RegistrarAlergia {
+    constructor(
+        private readonly alergiaRepository: AlergiaRepository
+    ){}
+
+    async ejecutar(datos: DatosNuevaAlergia): Promise<Alergia> {
+        if (!Number.isSafeInteger(datos.id_paciente) || datos.id_paciente <= 0) {
+            throw new Error('El ID del paciente no es válido');
+        }
+
+        if (!Number.isSafeInteger(datos.id_medico) || datos.id_medico <= 0) {
+            throw new Error('El ID del médico no es válido');
+        }
+
+        if (typeof datos.sustancia !== 'string' || !datos.sustancia.trim()) {
+            throw new Error('La sustancia es obligatoria');
+        }
+
+        if (typeof datos.reaccion !== 'string' || !datos.reaccion.trim()) {
+            throw new Error('La reacción es obligatoria');
+        }
+
+        if (!['leve', 'moderada', 'grave'].includes(datos.gravedad)) {
+            throw new Error('La gravedad no es válida');
+        }
+
+        if (!['activa', 'descartada'].includes(datos.estado)) {
+            throw new Error('El estado no es válido');
+        }
+
+        if (!(datos.fecha_deteccion instanceof Date) ||
+            Number.isNaN(datos.fecha_deteccion.getTime())) {
+            throw new Error('La fecha de detección no es válida');
+        }
+
+        return this.alergiaRepository.guardar({
+            ...datos,
+            sustancia: datos.sustancia.trim(),
+            reaccion: datos.reaccion.trim()
+        });
+    }
+}
