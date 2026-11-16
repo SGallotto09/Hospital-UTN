@@ -1,6 +1,6 @@
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 interface Paciente {
     id: number;
@@ -11,61 +11,35 @@ interface Paciente {
     genero: string;
     telefono: string;
     email: string;
-    obraSocial: string;
+    obraSocial: number;
 }
 
-const pacientes = ref<Paciente[]>([
-    {
-        id: 1,
-        nombre: "Lucía",
-        apellido: "Fernández",
-        dni: "42156890",
-        fechaNacimiento: "1998-04-13",
-        genero: "Femenino",
-        telefono: "3564 512345",
-        email: "lucia.fernandez@email.com",
-        obraSocial: "OSDE"
-    },
-    {
-        id: 2,
-        nombre: "Carlos",
-        apellido: "López",
-        dni: "35678901",
-        fechaNacimiento: "1989-08-22",
-        genero: "Masculino",
-        telefono: "3564 498765",
-        email: "carlos.lopez@email.com",
-        obraSocial: "APROSS"
-    },
-    {
-        id: 3,
-        nombre: "Mariana",
-        apellido: "Gómez",
-        dni: "39876543",
-        fechaNacimiento: "1994-11-05",
-        genero: "Femenino",
-        telefono: "3564 612345",
-        email: "mariana.gomez@email.com",
-        obraSocial: "Particular"
-    },
-    {
-        id: 4,
-        nombre: "Martín",
-        apellido: "Rodríguez",
-        dni: "33214567",
-        fechaNacimiento: "1987-02-17",
-        genero: "Masculino",
-        telefono: "3564 587654",
-        email: "martin.rodriguez@email.com",
-        obraSocial: "PAMI"
-    }
-]);
+interface ObraSocial {
+    id: number;
+    nombre: string;
+}
+
+interface RespuestaPacientes {
+    pacientes: Paciente[];
+}
+
+interface RespuestaObrasSociales {
+    obrasSociales: ObraSocial[];
+}
+
+const pacientes = ref<Paciente[]>([]);
+const obrasSociales = ref<ObraSocial[]>([]);
 
 const busqueda = ref("");
-const filtroCobertura = ref("todas");
+const filtroCobertura = ref<number | "todas">("todas");
+
 const mostrarFormulario = ref(false);
+const cargando = ref(false);
+const registrando = ref(false);
+
 const mensaje = ref("");
 const error = ref("");
+const errorCarga = ref("");
 
 const nuevoPaciente = reactive({
     nombre: "",
@@ -75,15 +49,94 @@ const nuevoPaciente = reactive({
     genero: "",
     telefono: "",
     email: "",
-    obraSocial: "Particular"
+    obraSocial: 0
 });
 
+// =====================================================
+// CARGAR PACIENTES Y OBRAS SOCIALES DESDE EXPRESS
+// =====================================================
+
+async function cargarDatos() {
+    cargando.value = true;
+    errorCarga.value = "";
+
+    try {
+        const [respuestaPacientes, respuestaObras] = await Promise.all([
+            fetch("/api/admisiones/pacientes", {
+                method: "GET",
+                credentials: "same-origin"
+            }),
+
+            fetch("/api/admisiones/obras-sociales", {
+                method: "GET",
+                credentials: "same-origin"
+            })
+        ]);
+
+        if (
+            respuestaPacientes.status === 401 ||
+            respuestaObras.status === 401
+        ) {
+            throw new Error(
+                "Tu sesión expiró. Volvé a iniciar sesión."
+            );
+        }
+
+        if (!respuestaPacientes.ok || !respuestaObras.ok) {
+            throw new Error(
+                "No se pudieron cargar los datos del servidor."
+            );
+        }
+
+        const datosPacientes =
+            await respuestaPacientes.json() as RespuestaPacientes;
+
+        const datosObras =
+            await respuestaObras.json() as RespuestaObrasSociales;
+
+        if (
+            !Array.isArray(datosPacientes.pacientes) ||
+            !Array.isArray(datosObras.obrasSociales)
+        ) {
+            throw new Error(
+                "El servidor devolvió información inválida."
+            );
+        }
+
+        pacientes.value = datosPacientes.pacientes;
+        obrasSociales.value = datosObras.obrasSociales;
+
+        nuevoPaciente.obraSocial =
+            obrasSociales.value[0]?.id ?? 0;
+
+    } catch (err) {
+
+        errorCarga.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al cargar los datos.";
+
+    } finally {
+
+        cargando.value = false;
+
+    }
+}
+
+// =====================================================
+// FILTRADO DE PACIENTES
+// =====================================================
+
 const pacientesFiltrados = computed(() => {
+
     return pacientes.value.filter((paciente) => {
+
         const texto = busqueda.value.toLowerCase().trim();
 
+        const nombreCompleto =
+            `${paciente.nombre} ${paciente.apellido}`.toLowerCase();
+
         const coincideBusqueda =
-            `${paciente.nombre} ${paciente.apellido}`.toLowerCase().includes(texto) ||
+            nombreCompleto.includes(texto) ||
             paciente.dni.includes(texto);
 
         const coincideCobertura =
@@ -91,16 +144,51 @@ const pacientesFiltrados = computed(() => {
             paciente.obraSocial === filtroCobertura.value;
 
         return coincideBusqueda && coincideCobertura;
+
     });
+
 });
 
-const totalPacientes = computed(() => pacientes.value.length);
+// =====================================================
+// DATOS DE RESUMEN
+// =====================================================
 
-const pacientesConCobertura = computed(() =>
-    pacientes.value.filter((paciente) => paciente.obraSocial !== "Particular").length
-);
+const totalPacientes = computed(() => {
+    return pacientes.value.length;
+});
+
+const pacientesConCobertura = computed(() => {
+
+    return pacientes.value.filter((paciente) => {
+
+        const nombreObra = obtenerNombreObraSocial(
+            paciente.obraSocial
+        );
+
+        return nombreObra.toLowerCase() !== "particular";
+
+    }).length;
+
+});
+
+// =====================================================
+// OBTENER NOMBRE DE LA OBRA SOCIAL
+// =====================================================
+
+function obtenerNombreObraSocial(id: number): string {
+
+    return obrasSociales.value.find(
+        (obra) => obra.id === id
+    )?.nombre ?? "Sin cobertura";
+
+}
+
+// =====================================================
+// CALCULAR EDAD
+// =====================================================
 
 function obtenerEdad(fechaNacimiento: string): number {
+
     const nacimiento = new Date(`${fechaNacimiento}T00:00:00`);
     const hoy = new Date();
 
@@ -108,15 +196,25 @@ function obtenerEdad(fechaNacimiento: string): number {
 
     const noCumplioAnios =
         hoy.getMonth() < nacimiento.getMonth() ||
-        (hoy.getMonth() === nacimiento.getMonth() &&
-            hoy.getDate() < nacimiento.getDate());
+        (
+            hoy.getMonth() === nacimiento.getMonth() &&
+            hoy.getDate() < nacimiento.getDate()
+        );
 
-    if (noCumplioAnios) edad--;
+    if (noCumplioAnios) {
+        edad--;
+    }
 
     return edad;
+
 }
 
+// =====================================================
+// LIMPIAR FORMULARIO
+// =====================================================
+
 function limpiarFormulario() {
+
     nuevoPaciente.nombre = "";
     nuevoPaciente.apellido = "";
     nuevoPaciente.dni = "";
@@ -124,122 +222,355 @@ function limpiarFormulario() {
     nuevoPaciente.genero = "";
     nuevoPaciente.telefono = "";
     nuevoPaciente.email = "";
-    nuevoPaciente.obraSocial = "Particular";
+
+    nuevoPaciente.obraSocial =
+        obrasSociales.value[0]?.id ?? 0;
+
 }
 
-function registrarPaciente() {
+// =====================================================
+// ABRIR FORMULARIO
+// =====================================================
+
+function abrirFormulario() {
+
     error.value = "";
     mensaje.value = "";
 
+    limpiarFormulario();
+
+    mostrarFormulario.value = true;
+
+}
+
+// =====================================================
+// REGISTRAR PACIENTE EN MYSQL
+// =====================================================
+
+async function registrarPaciente() {
+
+    if (registrando.value) return;
+
+    error.value = "";
+    mensaje.value = "";
+
+    const dni = nuevoPaciente.dni.trim();
+
+    if (!nuevoPaciente.obraSocial) {
+
+        error.value = "Seleccioná una obra social.";
+        return;
+
+    }
+
+    // Comprobación local para evitar duplicados visibles.
+    // El backend y MySQL realizan la validación definitiva.
+
     const dniExistente = pacientes.value.some(
-        (paciente) => paciente.dni === nuevoPaciente.dni.trim()
+        (paciente) => paciente.dni === dni
     );
 
     if (dniExistente) {
-        error.value = "Ya existe un paciente registrado con ese DNI.";
+
+        error.value =
+            "Ya existe un paciente registrado con ese DNI.";
+
         return;
+
     }
 
-    pacientes.value.push({
-        id: Math.max(0, ...pacientes.value.map((p) => p.id)) + 1,
-        nombre: nuevoPaciente.nombre.trim(),
-        apellido: nuevoPaciente.apellido.trim(),
-        dni: nuevoPaciente.dni.trim(),
-        fechaNacimiento: nuevoPaciente.fechaNacimiento,
-        genero: nuevoPaciente.genero,
-        telefono: nuevoPaciente.telefono.trim(),
-        email: nuevoPaciente.email.trim(),
-        obraSocial: nuevoPaciente.obraSocial
-    });
+    registrando.value = true;
 
-    limpiarFormulario();
-    mostrarFormulario.value = false;
-    mensaje.value = "El paciente fue registrado correctamente.";
+    try {
+
+        const respuesta = await fetch(
+            "/api/admisiones/pacientes",
+            {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    nombre: nuevoPaciente.nombre.trim(),
+                    apellido: nuevoPaciente.apellido.trim(),
+                    dni,
+                    fechaNacimiento: nuevoPaciente.fechaNacimiento,
+                    genero: nuevoPaciente.genero,
+                    telefono: nuevoPaciente.telefono.trim(),
+                    email: nuevoPaciente.email.trim(),
+                    obraSocial: nuevoPaciente.obraSocial
+                })
+            }
+        );
+
+        const datos = await respuesta.json() as {
+            mensaje?: string;
+            paciente?: Paciente;
+        };
+
+        if (respuesta.status === 401) {
+
+            error.value =
+                "Tu sesión expiró. Volvé a iniciar sesión.";
+
+            return;
+
+        }
+
+        if (respuesta.status === 409) {
+
+            error.value = datos.mensaje ??
+                "Ya existe un paciente registrado con ese DNI.";
+
+            return;
+
+        }
+
+        if (!respuesta.ok) {
+
+            throw new Error(
+                datos.mensaje ??
+                "No se pudo registrar el paciente."
+            );
+
+        }
+
+        if (!datos.paciente) {
+
+            throw new Error(
+                "El servidor no devolvió los datos del paciente."
+            );
+
+        }
+
+        // Agregamos el paciente que devuelve MySQL.
+        pacientes.value.push(datos.paciente);
+
+        // Limpiamos los filtros para que se pueda visualizar.
+        busqueda.value = "";
+        filtroCobertura.value = "todas";
+
+        limpiarFormulario();
+
+        mostrarFormulario.value = false;
+
+        mensaje.value =
+            "El paciente fue registrado correctamente.";
+
+    } catch (err) {
+
+        error.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al registrar el paciente.";
+
+    } finally {
+
+        registrando.value = false;
+
+    }
+
 }
+
+// =====================================================
+// CARGA INICIAL
+// =====================================================
+
+onMounted(() => {
+    void cargarDatos();
+});
+
 </script>
 
 <template>
     <section class="pacientes-view">
+
+        <!-- ENCABEZADO -->
         <header class="page-header">
+
             <div>
-                <span class="eyebrow">ADMISIÓN Y TURNOS</span>
+                <span class="eyebrow">ADMISIONES</span>
+
                 <h1>Pacientes</h1>
-                <p>Consultá y administrá los pacientes registrados en el hospital.</p>
+
+                <p>
+                    Consultá y administrá los pacientes registrados en el hospital.
+                </p>
             </div>
 
-            <button class="btn-primary" @click="mostrarFormulario = true">
+            <button
+                class="btn-primary"
+                type="button"
+                @click="abrirFormulario"
+            >
                 <span class="plus-icon">+</span>
                 Nuevo paciente
             </button>
+
         </header>
 
+        <!-- MENSAJE DE ÉXITO -->
         <div v-if="mensaje" class="feedback success">
+
             {{ mensaje }}
-            <button @click="mensaje = ''">×</button>
+
+            <button
+                type="button"
+                @click="mensaje = ''"
+            >
+                ×
+            </button>
+
         </div>
 
+        <!-- ESTADO DE CARGA -->
+        <div v-if="cargando" class="feedback">
+            Cargando pacientes y obras sociales...
+        </div>
+
+        <!-- ERROR DE CARGA -->
+        <div v-if="errorCarga" class="feedback error">
+
+            <span>{{ errorCarga }}</span>
+
+            <button
+                type="button"
+                class="retry-button"
+                @click="cargarDatos"
+            >
+                Reintentar
+            </button>
+
+        </div>
+
+        <!-- RESUMEN -->
         <div class="summary-grid">
+
             <article class="summary-card">
-                <div class="summary-icon blue">♙</div>
+
+                <div class="summary-icon blue">
+                    ♙
+                </div>
+
                 <div>
-                    <span class="summary-label">Total de pacientes</span>
+                    <span class="summary-label">
+                        Total de pacientes
+                    </span>
+
                     <strong>{{ totalPacientes }}</strong>
-                    <small>Pacientes registrados</small>
+
+                    <small>
+                        Pacientes registrados
+                    </small>
                 </div>
+
             </article>
 
             <article class="summary-card">
-                <div class="summary-icon green">✓</div>
+
+                <div class="summary-icon green">
+                    ✓
+                </div>
+
                 <div>
-                    <span class="summary-label">Con cobertura médica</span>
+                    <span class="summary-label">
+                        Con cobertura médica
+                    </span>
+
                     <strong>{{ pacientesConCobertura }}</strong>
-                    <small>Obra social o prepaga</small>
+
+                    <small>
+                        Obra social o prepaga
+                    </small>
                 </div>
+
             </article>
 
             <article class="summary-card">
-                <div class="summary-icon orange">＋</div>
-                <div>
-                    <span class="summary-label">Atención particular</span>
-                    <strong>{{ totalPacientes - pacientesConCobertura }}</strong>
-                    <small>Sin cobertura registrada</small>
+
+                <div class="summary-icon orange">
+                    ＋
                 </div>
+
+                <div>
+                    <span class="summary-label">
+                        Atención particular
+                    </span>
+
+                    <strong>
+                        {{ totalPacientes - pacientesConCobertura }}
+                    </strong>
+
+                    <small>
+                        Sin cobertura de obra social
+                    </small>
+                </div>
+
             </article>
+
         </div>
 
+        <!-- LISTADO -->
         <section class="table-section">
+
             <div class="section-heading">
+
                 <div>
                     <h2>Listado de pacientes</h2>
-                    <p>Encontrá rápidamente la información de cada paciente.</p>
+
+                    <p>
+                        Encontrá rápidamente la información de cada paciente.
+                    </p>
                 </div>
 
                 <span class="result-count">
                     {{ pacientesFiltrados.length }} resultados
                 </span>
+
             </div>
 
+            <!-- FILTROS -->
             <div class="filters">
+
                 <div class="search-box">
+
                     <span>⌕</span>
+
                     <input
                         v-model="busqueda"
                         type="text"
                         placeholder="Buscar por nombre, apellido o DNI..."
                     />
+
                 </div>
 
-                <select v-model="filtroCobertura" aria-label="Filtrar por cobertura">
-                    <option value="todas">Todas las coberturas</option>
-                    <option value="OSDE">OSDE</option>
-                    <option value="APROSS">APROSS</option>
-                    <option value="PAMI">PAMI</option>
-                    <option value="Particular">Particular</option>
+                <select
+                    v-model="filtroCobertura"
+                    aria-label="Filtrar por cobertura"
+                >
+
+                    <option value="todas">
+                        Todas las coberturas
+                    </option>
+
+                    <option
+                        v-for="obra in obrasSociales"
+                        :key="obra.id"
+                        :value="obra.id"
+                    >
+                        {{ obra.nombre }}
+                    </option>
+
                 </select>
+
             </div>
 
+            <!-- TABLA -->
             <div class="table-wrapper">
+
                 <table>
+
                     <thead>
                         <tr>
                             <th>Paciente</th>
@@ -252,58 +583,122 @@ function registrarPaciente() {
                     </thead>
 
                     <tbody>
-                        <tr v-for="paciente in pacientesFiltrados" :key="paciente.id">
+
+                        <tr
+                            v-for="paciente in pacientesFiltrados"
+                            :key="paciente.id"
+                        >
+
                             <td>
+
                                 <div class="patient-cell">
+
                                     <div class="avatar">
+
                                         {{ paciente.nombre.charAt(0) }}{{ paciente.apellido.charAt(0) }}
+
                                     </div>
+
                                     <div>
-                                        <strong>{{ paciente.apellido }}, {{ paciente.nombre }}</strong>
-                                        <small>{{ paciente.genero }}</small>
+
+                                        <strong>
+                                            {{ paciente.apellido }},
+                                            {{ paciente.nombre }}
+                                        </strong>
+
+                                        <small>
+                                            {{ paciente.genero }}
+                                        </small>
+
                                     </div>
+
                                 </div>
+
                             </td>
 
                             <td>{{ paciente.dni }}</td>
-                            <td>{{ obtenerEdad(paciente.fechaNacimiento) }} años</td>
-                            <td>{{ paciente.telefono }}</td>
+
                             <td>
+                                {{ obtenerEdad(paciente.fechaNacimiento) }} años
+                            </td>
+
+                            <td>{{ paciente.telefono }}</td>
+
+                            <td>
+
                                 <span
                                     class="coverage-badge"
-                                    :class="{ particular: paciente.obraSocial === 'Particular' }"
+                                    :class="{
+                                        particular:
+                                            obtenerNombreObraSocial(paciente.obraSocial).toLowerCase() === 'particular'
+                                    }"
                                 >
-                                    {{ paciente.obraSocial }}
+                                    {{ obtenerNombreObraSocial(paciente.obraSocial) }}
                                 </span>
+
                             </td>
+
                             <td>
-                                <a class="email-link" :href="`mailto:${paciente.email}`">
+
+                                <a
+                                    class="email-link"
+                                    :href="`mailto:${paciente.email}`"
+                                >
                                     Enviar email
                                 </a>
+
                             </td>
+
                         </tr>
 
-                        <tr v-if="pacientesFiltrados.length === 0">
+                        <!-- SIN RESULTADOS -->
+                        <tr v-if="!cargando && pacientesFiltrados.length === 0">
+
                             <td colspan="6" class="empty-state">
-                                No se encontraron pacientes con esos criterios.
+
+                                <strong>
+                                    No se encontraron pacientes.
+                                </strong>
+
+                                <p>
+                                    Probá modificando los criterios de búsqueda.
+                                </p>
+
                             </td>
+
                         </tr>
+
                     </tbody>
+
                 </table>
+
             </div>
+
         </section>
 
+        <!-- MODAL REGISTRAR PACIENTE -->
         <div
             v-if="mostrarFormulario"
             class="modal-overlay"
             @click.self="mostrarFormulario = false"
         >
+
             <section class="modal">
+
                 <header class="modal-header">
+
                     <div>
-                        <span class="eyebrow">ADMISIÓN</span>
+
+                        <span class="eyebrow">
+                            ADMISIONES
+                        </span>
+
                         <h2>Registrar paciente</h2>
-                        <p>Completá los datos personales del nuevo paciente.</p>
+
+                        <p>
+                            Completá los datos personales del nuevo paciente.
+                        </p>
+
                     </div>
 
                     <button
@@ -314,98 +709,193 @@ function registrarPaciente() {
                     >
                         ×
                     </button>
+
                 </header>
 
-                <form class="patient-form" @submit.prevent="registrarPaciente">
+                <form
+                    class="patient-form"
+                    @submit.prevent="registrarPaciente"
+                >
+
                     <div class="form-grid">
+
                         <label>
+
                             Nombre
-                            <input v-model="nuevoPaciente.nombre" required maxlength="45" />
-                        </label>
 
-                        <label>
-                            Apellido
-                            <input v-model="nuevoPaciente.apellido" required maxlength="45" />
-                        </label>
-
-                        <label>
-                            DNI
                             <input
-                                v-model="nuevoPaciente.dni"
+                                v-model.trim="nuevoPaciente.nombre"
+                                type="text"
+                                required
+                                maxlength="45"
+                            />
+
+                        </label>
+
+                        <label>
+
+                            Apellido
+
+                            <input
+                                v-model.trim="nuevoPaciente.apellido"
+                                type="text"
+                                required
+                                maxlength="45"
+                            />
+
+                        </label>
+
+                        <label>
+
+                            DNI
+
+                            <input
+                                v-model.trim="nuevoPaciente.dni"
+                                type="text"
                                 required
                                 maxlength="45"
                                 inputmode="numeric"
                             />
+
                         </label>
 
                         <label>
+
                             Fecha de nacimiento
+
                             <input
                                 v-model="nuevoPaciente.fechaNacimiento"
                                 type="date"
                                 required
                             />
+
                         </label>
 
                         <label>
+
                             Género
-                            <select v-model="nuevoPaciente.genero" required>
-                                <option value="" disabled>Seleccionar</option>
-                                <option>Femenino</option>
-                                <option>Masculino</option>
-                                <option>Otro</option>
+
+                            <select
+                                v-model="nuevoPaciente.genero"
+                                required
+                            >
+
+                                <option value="" disabled>
+                                    Seleccionar
+                                </option>
+
+                                <option value="Femenino">
+                                    Femenino
+                                </option>
+
+                                <option value="Masculino">
+                                    Masculino
+                                </option>
+
+                                <option value="Otro">
+                                    Otro
+                                </option>
+
                             </select>
+
                         </label>
 
                         <label>
+
                             Teléfono
+
                             <input
-                                v-model="nuevoPaciente.telefono"
+                                v-model.trim="nuevoPaciente.telefono"
+                                type="tel"
                                 required
                                 maxlength="45"
-                                type="tel"
                             />
+
                         </label>
 
                         <label class="full-width">
+
                             Correo electrónico
+
                             <input
-                                v-model="nuevoPaciente.email"
+                                v-model.trim="nuevoPaciente.email"
                                 type="email"
                                 required
                                 maxlength="45"
                             />
+
                         </label>
 
                         <label class="full-width">
+
                             Cobertura médica
-                            <select v-model="nuevoPaciente.obraSocial" required>
-                                <option>OSDE</option>
-                                <option>APROSS</option>
-                                <option>PAMI</option>
-                                <option>Particular</option>
+
+                            <select
+                                v-model.number="nuevoPaciente.obraSocial"
+                                required
+                            >
+
+                                <option
+                                    :value="0"
+                                    disabled
+                                >
+                                    Seleccionar obra social
+                                </option>
+
+                                <option
+                                    v-for="obra in obrasSociales"
+                                    :key="obra.id"
+                                    :value="obra.id"
+                                >
+                                    {{ obra.nombre }}
+                                </option>
+
                             </select>
+
                         </label>
+
                     </div>
 
-                    <p v-if="error" class="feedback error">{{ error }}</p>
+                    <!-- ERROR DEL REGISTRO -->
+                    <p
+                        v-if="error"
+                        class="feedback error"
+                    >
+                        {{ error }}
+                    </p>
 
+                    <!-- ACCIONES -->
                     <footer class="modal-actions">
+
                         <button
                             class="btn-secondary"
                             type="button"
+                            :disabled="registrando"
                             @click="mostrarFormulario = false"
                         >
                             Cancelar
                         </button>
 
-                        <button class="btn-primary" type="submit">
-                            Registrar paciente
+                        <button
+                            class="btn-primary"
+                            type="submit"
+                            :disabled="registrando || obrasSociales.length === 0"
+                        >
+                            {{
+                                registrando
+                                    ? "Registrando..."
+                                    : "Registrar paciente"
+                            }}
                         </button>
+
                     </footer>
+
                 </form>
+
             </section>
+
         </div>
+
     </section>
 </template>
 
@@ -457,6 +947,11 @@ button {
     cursor: pointer;
 }
 
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .btn-primary {
     display: inline-flex;
     align-items: center;
@@ -472,7 +967,7 @@ button {
     transition: background 0.2s;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background: #066da9;
 }
 
@@ -480,6 +975,48 @@ button {
     font-size: 19px;
     line-height: 12px;
 }
+
+/* MENSAJES */
+
+.feedback {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding: 12px 15px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #526174;
+    background: #edf4fa;
+}
+
+.feedback.success {
+    color: #18764f;
+    background: #e9f7f0;
+}
+
+.feedback.error {
+    color: #b42318;
+    background: #fff0ee;
+}
+
+.feedback button {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 19px;
+}
+
+.retry-button {
+    padding: 6px 10px;
+    border: 1px solid #d6b5b5;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* TARJETAS DE RESUMEN */
 
 .summary-grid {
     display: grid;
@@ -537,6 +1074,8 @@ button {
     font-size: 25px;
 }
 
+/* TABLA */
+
 .table-section {
     padding: 24px;
     background: white;
@@ -560,6 +1099,7 @@ button {
     padding: 7px 12px;
     font-size: 12px;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .filters {
@@ -662,6 +1202,7 @@ tbody tr:last-child td {
     place-items: center;
     width: 37px;
     height: 37px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: #e8f4fc;
     color: #087fc4;
@@ -700,32 +1241,17 @@ tbody tr:last-child td {
     color: #8491a1;
 }
 
-.feedback {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 18px;
-    padding: 12px 15px;
-    border-radius: 8px;
-    font-size: 13px;
+.empty-state strong {
+    display: block;
+    margin-bottom: 6px;
 }
 
-.feedback.success {
-    color: #18764f;
-    background: #e9f7f0;
+.empty-state p {
+    margin: 0;
+    font-size: 12px;
 }
 
-.feedback.success button {
-    border: none;
-    background: transparent;
-    color: inherit;
-    font-size: 19px;
-}
-
-.feedback.error {
-    color: #b42318;
-    background: #fff0ee;
-}
+/* MODAL */
 
 .modal-overlay {
     position: fixed;
