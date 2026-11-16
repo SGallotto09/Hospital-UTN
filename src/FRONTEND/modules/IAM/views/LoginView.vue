@@ -1,16 +1,46 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { useRouter } from "vue-router";
 
-const email = ref("");
+const router = useRouter();
+const usuario = ref("");
 const password = ref("");
-const recordarSesion = ref(false);
 const mostrarPassword = ref(false);
 const mensaje = ref("");
+const ingresando = ref(false);
 
-function iniciarSesion() {
-mensaje.value =
-    "La interfaz está lista. Próximamente conectaremos la autenticación con la API.";
+async function iniciarSesion() {
+    if (ingresando.value) return;
+    mensaje.value = "";
+    ingresando.value = true;
+
+    try {
+        const respuesta = await fetch("/api/auth/login", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                usuario: usuario.value,
+                contrasenia: password.value,
+            }),
+        });
+
+        if (respuesta.status !== 200) {
+            mensaje.value = respuesta.status === 401
+                ? "Usuario o contraseña incorrectos."
+                : "No se pudo iniciar sesión. Intentá nuevamente.";
+            return;
+        }
+
+        password.value = "";
+        // Destino provisional hasta que el grupo defina la pantalla inicial.
+        await router.replace("/recursos-camas");
+    } catch {
+        mensaje.value = "No se pudo conectar con el sistema. Intentá nuevamente.";
+    } finally {
+        ingresando.value = false;
+    }
 }
 
 function recuperarAcceso() {
@@ -173,7 +203,7 @@ mensaje.value =
 
         <form @submit.prevent="iniciarSesion">
             <div class="form-group">
-            <label for="email">Correo electrónico</label>
+            <label for="usuario">Usuario</label>
 
             <div class="input-wrapper">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -196,10 +226,10 @@ mensaje.value =
                 </svg>
 
                 <input
-                id="email"
-                v-model.trim="email"
-                type="email"
-                placeholder="nombre@hospital.com"
+                id="usuario"
+                v-model.trim="usuario"
+                type="text"
+                placeholder="Ingresá tu usuario"
                 autocomplete="username"
                 required
                 />
@@ -282,7 +312,7 @@ mensaje.value =
 
             <div class="form-options">
             <label class="remember-option">
-                <input v-model="recordarSesion" type="checkbox" />
+                <input type="checkbox" disabled title="Opción no disponible" />
                 <span>Recordarme</span>
             </label>
 
@@ -299,8 +329,8 @@ mensaje.value =
             {{ mensaje }}
             </p>
 
-            <button class="submit-button" type="submit">
-            <span>Ingresar al sistema</span>
+            <button class="submit-button" type="submit" :disabled="ingresando" :aria-busy="ingresando">
+            <span>{{ ingresando ? "Ingresando…" : "Ingresar al sistema" }}</span>
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path
                 d="M5 12H19M12 5L19 12L12 19"
