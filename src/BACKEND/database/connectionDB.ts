@@ -1,42 +1,50 @@
 
-import mysql, {type Connection } from 'mysql2/promise';
+import mysql, { type Pool } from "mysql2/promise";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 export class Database {
     private static instance: Database;
-    private connection: Promise<Connection  >;
+    private connection: Pool;
 
     private constructor() {
-
-        this.connection = mysql.createConnection({
-            host: 'localhost',
-            user: 'root',
-            password: '',
-            database: 'hospital_utn',
+        this.connection = mysql.createPool({
+            host: process.env.DB_HOST,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+            waitForConnections: true,
+            connectionLimit: 10,
+            queueLimit: 0
         });
-        
     }
-    public static getInstance(): Database{
-        if(!Database.instance){
+
+    public static getInstance(): Database {
+        if (!Database.instance) {
             Database.instance = new Database();
         }
+
         return Database.instance;
     }
-    public async query(sql: string, values?: any[]){
-        const connection = await this.connection;
 
-        return connection.execute(sql, values);
+    public async query(sql: string, values?: any[]) {
+        return this.connection.execute(sql, values);
     }
 
-    public async probarConexion(): Promise<boolean>{
-        try{
-            const connection = await this.connection;
-            await connection.ping();
+    public async probarConexion(): Promise<boolean> {
+        try {
+            const conexion = await this.connection.getConnection();
+            await conexion.ping();
+            conexion.release();
 
-            console.log('Conexión exitosa');
+            console.log("Conexión exitosa");
             return true;
-        }catch(error){
-            console.error('Error al conectar a MySQL: ', error);
+        } catch (error) {
+            console.error("Error al conectar a MySQL:", error);
             return false;
         }
     }
-}
+
+    }
+
