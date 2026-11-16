@@ -7,43 +7,33 @@ import {
     ref
 } from "vue";
 
-
 // Datos recibidos desde el backend
 
 interface TurnoAsignadoPayload {
-
     idTurno: number;
     idPaciente: number;
     idMedico: number;
     fechaHoraInicio: string;
     fechaHoraFin: string;
-
 }
 
-
 interface PacienteEnSalaEsperaPayload {
-
     idTurno: number;
     idPaciente: number;
     idMedico: number;
-
 }
 
-
 interface UrgenciaVitalPayload {
-
     idTriaje: number;
     idPaciente: number;
     idEnfermero: number;
     nivelUrgencia: "ROJO";
     fechaHoraIngreso: string;
-
 }
 
-
 // Eventos enviados por el servidor
-interface ServerToClientEvents {
 
+interface ServerToClientEvents {
     "admision:turno-asignado": (
         datos: TurnoAsignadoPayload
     ) => void;
@@ -55,25 +45,23 @@ interface ServerToClientEvents {
     "triaje:riesgo-vital": (
         datos: UrgenciaVitalPayload
     ) => void;
-
 }
 
-
 // Eventos enviados por el cliente
+
 interface ClientToServerEvents {}
 
-
 // Composable para administrar las notificaciones
+
 export function useNotificaciones(
-    token: string,
     urlServidor = "http://localhost:3000"
 ) {
-
     // Estado de conexión
+
     const conectado = ref(false);
 
-
     // Notificaciones recibidas
+
     const turnosAsignados = ref<TurnoAsignadoPayload[]>([]);
 
     const pacientesEnSalaEspera =
@@ -81,104 +69,85 @@ export function useNotificaciones(
 
     const urgenciasVitales = ref<UrgenciaVitalPayload[]>([]);
 
+    // Crear conexión Socket.IO utilizando la sesión de Express
 
-    // Crear conexión Socket.IO
-    // Los tipos se definen en Socket, no en io()
     const socket: Socket<
         ServerToClientEvents,
         ClientToServerEvents
     > = io(urlServidor, {
-
         autoConnect: false,
-
-        auth: {
-            token
-        },
-
         withCredentials: true
-
     });
 
-
     // Evento: conexión establecida
-    const alConectar = () => {
 
+    const alConectar = () => {
         conectado.value = true;
 
         console.log(
             "Conectado al servidor de notificaciones."
         );
-
     };
-
 
     // Evento: desconexión
+
     const alDesconectar = () => {
-
         conectado.value = false;
-
     };
 
-
     // Evento: turno asignado desde lista de espera
+
     const alRecibirTurnoAsignado = (
         datos: TurnoAsignadoPayload
     ) => {
-
         turnosAsignados.value.unshift(datos);
 
         console.log(
             "Nuevo turno asignado desde lista de espera:",
             datos
         );
-
     };
 
-
     // Evento: paciente en sala de espera
+
     const alRecibirPacienteEnSala = (
         datos: PacienteEnSalaEsperaPayload
     ) => {
-
         pacientesEnSalaEspera.value.unshift(datos);
 
         console.log(
             "Nuevo paciente en sala de espera:",
             datos
         );
-
     };
 
-
     // Evento: urgencia vital
+
     const alRecibirUrgenciaVital = (
         datos: UrgenciaVitalPayload
     ) => {
-
         urgenciasVitales.value.unshift(datos);
 
-        console.log(
+        console.error(
             "ALERTA: PACIENTE CON RIESGO VITAL",
             datos
         );
-
     };
 
-
     // Error de conexión o autenticación
+
     const alErrorConexion = (error: Error) => {
+        conectado.value = false;
 
         console.error(
             "Error en Socket.IO:",
             error.message
         );
-
     };
 
-
     // Registrar eventos
-    socket.on("connect", alConectar);
 
+    socket.on("connect", alConectar);
     socket.on("disconnect", alDesconectar);
 
     socket.on(
@@ -198,33 +167,22 @@ export function useNotificaciones(
 
     socket.on("connect_error", alErrorConexion);
 
-
     // Conectar al montar el componente
+
     onMounted(() => {
-
         socket.connect();
-
     });
-
 
     // Desconectar al desmontar el componente
+
     onUnmounted(() => {
-
         socket.disconnect();
-
     });
 
-
     return {
-
         conectado,
-
         turnosAsignados,
-
         pacientesEnSalaEspera,
-
         urgenciasVitales
-
     };
-
 }
