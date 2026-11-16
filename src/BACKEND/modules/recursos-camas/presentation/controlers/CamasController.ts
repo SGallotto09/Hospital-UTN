@@ -7,8 +7,6 @@ import type { TransicionarCama } from '../../application/use-cases/TransicionarC
 import type { AccionCama } from '../../domain/repositories/ITransicionCamaRepository.js'
 import { validarTransicion } from '../validators/transicionValidator.js'
 import type { IPacienteGateway } from '../../application/ports/IPacienteGateway.js'
-import type { RegistrarCama } from '../../application/use-cases/RegistrarCama.js'
-import { validarRegistroCama } from '../validators/registroCamaValidator.js'
 
 export interface ActorRecursosCamas {
   idUsuario: number
@@ -25,7 +23,6 @@ export class CamasController {
     private readonly obtenerActor: ObtenerActor,
     private readonly transicionarCama: TransicionarCama | undefined,
     private readonly pacientes?: IPacienteGateway,
-    private readonly registrarCama?: RegistrarCama,
   ) {}
 
   private exigirPermiso(req: Request, permiso: string): ActorRecursosCamas {
@@ -43,40 +40,6 @@ export class CamasController {
     try {
       this.exigirPermiso(req, 'camas:consultar')
       res.status(200).json({ camas: await this.consultaCamas.listar() })
-    } catch (error) {
-      next(error)
-    }
-  }
-
-  listarTiposCama = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      this.exigirPermiso(req, 'camas:consultar')
-      res.status(200).json({ tipos: await this.consultaCamas.listarTiposCama() })
-    } catch (error) {
-      next(error)
-    }
-  }
-
-  registrar = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      this.exigirPermiso(req, 'camas:mantener')
-      if (!this.registrarCama) {
-        throw new ErrorRecursosCamas(
-          'TRANSACCIONES_NO_DISPONIBLES',
-          'El alta de camas no estÃ¡ habilitada en este montaje.',
-        )
-      }
-      const datos = validarRegistroCama(req.body)
-      const cama = await this.registrarCama.ejecutar(datos)
-      res.status(201).json({
-        cama: {
-          id: cama.id,
-          estado: cama.estado,
-          habitacion: cama.habitacion,
-          piso: cama.piso,
-          idTipoCama: cama.idTipoCama,
-        },
-      })
     } catch (error) {
       next(error)
     }

@@ -11,7 +11,6 @@ import { ErrorRecursosCamas } from '../../domain/errors/ErrorRecursosCamas.js'
 import { Cama } from '../../domain/entities/Cama.js'
 import { TransicionarCama } from '../../application/use-cases/TransicionarCama.js'
 import { InventarioController } from '../../presentation/controlers/InventarioController.js'
-import { RegistrarCama } from '../../application/use-cases/RegistrarCama.js'
 
 const require = createRequire(import.meta.url)
 let expressDisponible = false
@@ -46,10 +45,7 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
             : undefined,
       }),
     )
-    const consultaCamas: IConsultaCamas = {
-      listar: async () => [],
-      listarTiposCama: async () => [{ id: 1, nombre: 'Compartida' }],
-    }
+    const consultaCamas: IConsultaCamas = { listar: async () => [] }
     const asignar = new AsignarCama(
       {
         async asignarSiDisponible(solicitud, ocupar) {
@@ -134,12 +130,6 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
             return undefined
           },
           transicionar,
-          undefined,
-          new RegistrarCama({
-            async registrar(datos) {
-              return new Cama({ id: 205, estado: 'Libre', ...datos })
-            },
-          }),
         ),
         new InventarioController(
           {
@@ -183,34 +173,6 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
     })
   }
 
-  function postCama(body: unknown, token = 'prueba') {
-    return fetch(`${url}/camas`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    })
-  }
-
-  it('201: registra una cama libre con tipo existente y permiso de mantenimiento', async () => {
-    const respuesta = await postCama({ habitacion: 205, piso: 2, idTipoCama: 1 })
-    expect(respuesta.status).toBe(201)
-    expect(await respuesta.json()).toEqual({
-      cama: { id: 205, estado: 'Libre', habitacion: 205, piso: 2, idTipoCama: 1 },
-    })
-  })
-  it.each([
-    [{ habitacion: 0, piso: 2, idTipoCama: 1 }],
-    [{ habitacion: 205.5, piso: 2, idTipoCama: 1 }],
-    [{ habitacion: 205, piso: 2, idTipoCama: 0 }],
-    [{ habitacion: 205, piso: 2, idTipoCama: 1, estado: 'Ocupada' }],
-  ])('400: rechaza datos inválidos de alta %j', async (body) => {
-    expect((await postCama(body)).status).toBe(400)
-  })
-  it('401/403: protege el alta por sesión y permiso autorizado', async () => {
-    expect((await postCama({ habitacion: 205, piso: 2, idTipoCama: 1 }, 'ausente')).status).toBe(401)
-    expect((await postCama({ habitacion: 205, piso: 2, idTipoCama: 1 }, 'sin-permiso')).status).toBe(403)
-  })
-
   it('201: asigna usando el usuario autenticado', async () => {
     const respuesta = await post({ idCama: 1, idPaciente: 8 })
     expect(respuesta.status).toBe(201)
@@ -237,11 +199,6 @@ describe.skipIf(!expressDisponible)('HTTP Express: HU 1.1 y HU 2.1', () => {
     const respuesta = await fetch(`${url}/camas`, { headers: { Authorization: 'Bearer prueba' } })
     expect(respuesta.status).toBe(200)
     expect(await respuesta.json()).toEqual({ camas: [] })
-  })
-  it('200: expone los tipos de cama configurados', async () => {
-    const respuesta = await fetch(`${url}/tipos-cama`, { headers: { Authorization: 'Bearer prueba' } })
-    expect(respuesta.status).toBe(200)
-    expect(await respuesta.json()).toEqual({ tipos: [{ id: 1, nombre: 'Compartida' }] })
   })
 
   it('200: consulta el inventario sin disparar consumos', async () => {

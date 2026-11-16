@@ -37,8 +37,6 @@ const boton = (wrapper: ReturnType<typeof mount>, texto: string) =>
 function crearApi(inicial: Cama = cama): CamasApi {
   return {
     listar: vi.fn().mockResolvedValue([inicial]),
-    listarTiposCama: vi.fn().mockResolvedValue([{ id: 1, nombre: 'Compartida' }]),
-    registrar: vi.fn(),
     asignar: vi.fn(),
     buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),
     transicionar: vi.fn().mockResolvedValue(resultado),

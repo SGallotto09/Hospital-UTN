@@ -19,19 +19,6 @@ export interface Asignacion {
   fechaIngreso: string
 }
 
-export interface TipoCama {
-  id: number
-  nombre: string
-}
-
-export interface SolicitudRegistroCama {
-  habitacion: number
-  piso: number
-  idTipoCama: number
-}
-
-export type CamaRegistrada = Pick<Cama, 'id' | 'estado' | 'habitacion' | 'piso' | 'idTipoCama'>
-
 export type AccionCama = 'liberar' | 'confirmar-limpieza' | 'bloquear' | 'finalizar-mantenimiento'
 export type SolicitudTransicion = { estadoEsperado: EstadoCama } & (
   | { accion: 'liberar'; idAsignacion: number; motivo: 'alta' | 'traslado' }
@@ -56,8 +43,6 @@ export interface PacienteParaAsignacion {
 export interface CamasApi {
   buscarPacientePorDni(dni: string): Promise<PacienteParaAsignacion>
   listar(): Promise<Cama[]>
-  listarTiposCama(): Promise<TipoCama[]>
-  registrar(datos: SolicitudRegistroCama): Promise<CamaRegistrada>
   asignar(idCama: number, idPaciente: number): Promise<Asignacion>
   transicionar(idCama: number, solicitud: SolicitudTransicion): Promise<ResultadoTransicion>
 }
@@ -139,17 +124,6 @@ export function crearCamasApi(
     },
     async listar() {
       return (await enviar<{ camas: Cama[] }>(`${baseUrl}/camas`, solicitar)).camas
-    },
-    async listarTiposCama() {
-      return (await enviar<{ tipos: TipoCama[] }>(`${baseUrl}/tipos-cama`, solicitar)).tipos
-    },
-    async registrar(datos) {
-      const respuesta = await enviar<{ cama: CamaRegistrada }>(`${baseUrl}/camas`, solicitar, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datos),
-      })
-      return respuesta.cama
     },
     async asignar(idCama, idPaciente) {
       const datos = await enviar<{ asignacion: Asignacion }>(`${baseUrl}/asignaciones`, solicitar, {

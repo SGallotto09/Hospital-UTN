@@ -20,11 +20,6 @@ export interface CamaDTO {
   idAsignacionActiva: number | null
 }
 
-export interface TipoCamaDTO {
-  id: number
-  nombre: string
-}
-
 export interface AsignacionCamaDTO {
   id: number
   idCama: number

@@ -14,8 +14,6 @@ import type { RegistroConsumosMysql } from './infraestructure/database/RegistroC
 import { InventarioController } from './presentation/controlers/InventarioController.js'
 import { ProcesarConsumoInsumo } from './application/use-cases/ProcesarConsumoInsumo.js'
 import type { ConsumidorMedicacionAdministrada } from './application/ports/MedicacionAdministrada.js'
-import { RegistrarCama } from './application/use-cases/RegistrarCama.js'
-import { MysqlRegistroCamaRepository } from './infraestructure/repositories/MysqlRegistroCamaRepository.js'
 
 export interface DependenciasRecursosCamas {
   database: Pick<Database, 'query'>
@@ -66,18 +64,8 @@ export function crearModuloRecursosCamas(deps: DependenciasRecursosCamas) {
     ? new AsignarCama(new MysqlAsignacionCamaRepository(deps.transacciones), deps.pacientes)
     : undefined
   const transicionar = new TransicionarCama(new MysqlTransicionCamaRepository(deps.transacciones))
-  const registrarCama = new RegistrarCama(
-    new MysqlRegistroCamaRepository(new ConsultaMysqlCompartida(deps.database)),
-  )
   return crearRecursosCamasRouter(
-    new CamasController(
-      consultaCamas,
-      asignar,
-      deps.obtenerActor,
-      transicionar,
-      deps.pacientes,
-      registrarCama,
-    ),
+    new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar, deps.pacientes),
     new InventarioController(crearRepositorioInsumos(deps), deps.obtenerActor),
     false,
     !!deps.pacientes,
