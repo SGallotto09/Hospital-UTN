@@ -40,66 +40,76 @@ async obtenerTodas(): Promise<IndicacionMedicacion[]> {
     }
 
 
-    async administrar(id_indicacion_medica: number, id_enfermero: number, fecha_hora: Date): Promise<void>{
+    
+async administrar(
+    id_indicacion_medica: number,
+    id_enfermero: number,
+    fecha_hora: Date,
+    cantidad_administrada: number
+): Promise<number> {
 
-        const sqlBuscar = `
-            SELECT
-                im.id_insumo,
-                im.cantidad,
-                i.stock
-            FROM indicacion_medica im
-            INNER JOIN insumos i ON i.id = im.id_insumo
-            WHERE im.id = ?
-        `;
-        const [filas] = await this.db.query(sqlBuscar, [
-            id_indicacion_medica
-        ]);
-
-        const indicaciones = filas as {
-            id_insumo: number;
-            cantidad: number;
-            stock: number;
-        }[];
-
-        if (indicaciones.length === 0) {
-            throw new Error('No se encontró el insumo indicado');
-        }
-
-        const indicacion = indicaciones[0];
-
-            const sqlDescontar = `
-            UPDATE insumos
-            SET stock = stock - ?
-            WHERE id = ?
-            AND stock >= ?
-        `;
-
-        const [resultado] = await this.db.query(sqlDescontar, [
-            indicacion.cantidad,
-            indicacion.id_insumo,
-            indicacion.cantidad
-        ]);
-
-        const actualizacion = resultado as { affectedRows: number };
-
-        if (actualizacion.affectedRows === 0) {
-            throw new Error('No hay stock suficiente para administrar la medicación');
-        }
-
-        const sqlInsertar = `
-            INSERT INTO administracion_medicacion
-                (id_indicacion_medica, estado, id_enfermero, fecha_hora)
-            VALUES (?, ?, ?, ?)
-        `;
-
-        await this.db.query(sqlInsertar, [
-            id_indicacion_medica,
-            'Administrada',
-            id_enfermero,
-            fecha_hora
-        ]);
-
+    if (!Number.isFinite(cantidad_administrada) || cantidad_administrada <= 0) {
+        throw new Error('La cantidad administrada debe ser mayor a cero.');
     }
+
+    const sqlBuscar = `
+        SELECT
+            im.id_insumo,
+            i.stock
+        FROM indicacion_medica im
+        INNER JOIN insumos i ON i.id = im.id_insumo
+        WHERE im.id = ?
+    `;
+
+    const [filas] = await this.db.query(sqlBuscar, [
+        id_indicacion_medica
+    ]);
+
+    const indicaciones = filas as {
+        id_insumo: number;
+        stock: number;
+    }[];
+
+    if (indicaciones.length === 0) {
+        throw new Error('No se encontró el insumo indicado');
+    }
+
+    const indicacion = indicaciones[0];
+
+    const sqlDescontar = `
+        UPDATE insumos
+        SET stock = stock - ?
+        WHERE id = ?
+        AND stock >= ?
+    `;
+
+    const [resultado] = await this.db.query(sqlDescontar, [
+        cantidad_administrada,
+        indicacion.id_insumo,
+        cantidad_administrada
+    ]);
+
+    const actualizacion = resultado as { affectedRows: number };
+
+    if (actualizacion.affectedRows === 0) {
+        throw new Error('No hay stock suficiente para administrar la medicación');
+    }
+
+    const sqlInsertar = `
+        INSERT INTO administracion_medicacion
+            (id_indicacion_medica, estado, id_enfermero, fecha_hora)
+        VALUES (?, ?, ?, ?)
+    `;
+
+    const [resultado_insertar]: any = await this.db.query(sqlInsertar, [
+        id_indicacion_medica,
+        'Administrada',
+        id_enfermero,
+        fecha_hora
+    ]);
+
+    return resultado_insertar.insertId;
+}
 
     
     async obtenerDatosIndicacion(id_indicacion_medica: number): Promise<{fecha: string; hora_inicio: string; frecuencia_horas: number;} | null> {

@@ -16,6 +16,7 @@ import signoVitalRoutes from "./modules/atencion-enfermeria/infraestructure/api/
 import pacienteInternadoRoutes from "./modules/atencion-enfermeria/infraestructure/api/pacientes-internados/paciente_internado_routes.js";
 import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
 import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/dashboard/dashboard_routes.js";
+import protocoloAtencionRoutes from "./modules/atencion-enfermeria/infraestructure/api/protocolos/protocolo_atencion_routes.js";
 
 for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
     if (!process.env[nombre]?.trim()) throw new Error(`Falta configurar ${nombre}`);
@@ -70,6 +71,8 @@ app.use("/api/signos-vitales", signoVitalRoutes);
 app.use("/api/pacientes-internados", pacienteInternadoRoutes);
 app.use("/api/administracion-medicacion", administracionMedicacionRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+
+app.use("/api/protocolos", protocoloAtencionRoutes);
 
 const database = Database.getInstance();
 

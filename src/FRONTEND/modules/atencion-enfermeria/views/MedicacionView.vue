@@ -19,6 +19,7 @@ const medicaciones = ref<DosisProgramada[]>([]);
 const mensaje = ref("");
 const cargando = ref(false);
 const administrando = ref<string | null>(null);
+const cantidades_administradas = ref<Record<string, string>>({});
 
 const pendientes = () =>
     medicaciones.value.filter(
@@ -71,6 +72,7 @@ async function cargarMedicaciones(): Promise<void> {
     }
 }
 
+
 async function administrarMedicacion(
     medicacion: DosisProgramada
 ): Promise<void> {
@@ -82,6 +84,18 @@ async function administrarMedicacion(
     }
 
     const clave = obtenerClave(medicacion);
+    const cantidad_administrada = Number(
+        cantidades_administradas.value[clave]
+    );
+
+    if (
+        !Number.isFinite(cantidad_administrada) ||
+        cantidad_administrada <= 0
+    ) {
+        mensaje.value = "Ingresá una cantidad administrada válida";
+        return;
+    }
+
     administrando.value = clave;
 
     try {
@@ -95,7 +109,8 @@ async function administrarMedicacion(
                 },
                 body: JSON.stringify({
                     id_indicacion_medica: medicacion.id_indicacion_medica,
-                    horario_programado: medicacion.horario_programado
+                    horario_programado: medicacion.horario_programado,
+                    cantidad_administrada
                 })
             }
         );
@@ -110,7 +125,10 @@ async function administrarMedicacion(
 
         mensaje.value = resultado.mensaje;
 
+        delete cantidades_administradas.value[clave];
+
         await cargarMedicaciones();
+
     } catch (error) {
         mensaje.value = error instanceof Error
             ? error.message
@@ -119,6 +137,7 @@ async function administrarMedicacion(
         administrando.value = null;
     }
 }
+
 
 onMounted(cargarMedicaciones);
 </script>
@@ -181,8 +200,27 @@ onMounted(cargarMedicaciones);
                 <div class="medication-info">
                     <span class="label">MEDICACIÓN</span>
                     <strong>{{ medicacion.medicamento }}</strong>
-                    <span>{{ medicacion.cantidad }} unidad(es)</span>
+                    <span>Cantidad indicada: {{ medicacion.cantidad }}</span>
+
+                <div
+                    v-if="medicacion.estado === 'Pendiente'"
+                    class="quantity-field"
+                >
+                    <label :for="`cantidad-${obtenerClave(medicacion)}`">
+                        Cantidad realmente administrada
+                    </label>
+
+                    <input
+                        :id="`cantidad-${obtenerClave(medicacion)}`"
+                        v-model="cantidades_administradas[obtenerClave(medicacion)]"
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        placeholder="Ingresar cantidad"
+                        :disabled="administrando !== null"
+                    />
                 </div>
+            </div>
 
                 <div class="schedule">
                     <span class="label">HORARIO PROGRAMADO</span>
@@ -236,6 +274,31 @@ onMounted(cargarMedicaciones);
 </template>
 
 <style scoped>
+.quantity-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 12px;
+}
+
+.quantity-field label {
+    color: #526879;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.quantity-field input {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid #dce5eb;
+    border-radius: 7px;
+    font-size: 12px;
+    outline: none;
+}
+
+.quantity-field input:focus {
+    border-color: #087fc4;
+}
 .back-button {
     padding: 10px 14px;
     border: 1px solid #dce5eb;

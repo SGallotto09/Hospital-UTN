@@ -15,6 +15,10 @@
 <RouterLink to="/enfermeria/medicacion">
     Medicación
 </RouterLink>
+
+<RouterLink to="/enfermeria/protocolos">
+    Protocolos
+</RouterLink>
 </nav>
 </template>
 

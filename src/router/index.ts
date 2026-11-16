@@ -55,6 +55,12 @@ const router = createRouter({
                         import("@/FRONTEND/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
                 {
+                    path: "enfermeria/protocolos",
+                    name: "enfermeria-protocolos",
+                    component: () =>
+                        import("@/FRONTEND/modules/atencion-enfermeria/views/ProtocolosView.vue")
+                },
+                {
                     path: "admisiones",
                     component: AdmissionLayout,
                     redirect: { name: "dashboard-turnos" },
