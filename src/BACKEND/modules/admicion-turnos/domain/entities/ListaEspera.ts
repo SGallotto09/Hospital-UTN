@@ -1,7 +1,8 @@
+
 export type EstadoListaEspera =
     | "EN_ESPERA"
     | "ASIGNADO"
-    | "RETIRADO";
+    | "CANCELADO";
 
 
 export interface ListaEsperaProps {
@@ -51,7 +52,10 @@ export class ListaEspera {
         this.idMedico = props.idMedico;
         this.fechaSolicitada = props.fechaSolicitada;
 
-        this._fechaHoraIngreso = new Date(props.fechaHoraIngreso);
+        this._fechaHoraIngreso = new Date(
+            props.fechaHoraIngreso
+        );
+
         this._estado = props.estado;
 
     }
@@ -83,6 +87,7 @@ export class ListaEspera {
     }
 
 
+    // Obtener fecha y hora de ingreso
     get fechaHoraIngreso(): Date {
 
         return new Date(this._fechaHoraIngreso);
@@ -90,6 +95,7 @@ export class ListaEspera {
     }
 
 
+    // Obtener estado actual
     get estado(): EstadoListaEspera {
 
         return this._estado;
@@ -113,30 +119,46 @@ export class ListaEspera {
     }
 
 
-    // Retirar al paciente de la lista de espera
-    retirar(): void {
+    // Cancelar una solicitud de lista de espera
+    cancelar(): void {
 
         if (this._estado !== "EN_ESPERA") {
 
             throw new Error(
-                "Solo se puede retirar un paciente que esté en espera."
+                "Solo se pueden cancelar solicitudes que estén en espera."
             );
 
         }
 
-        this._estado = "RETIRADO";
+        this._estado = "CANCELADO";
 
     }
 
 
+    // Mantener compatibilidad con el método anterior
+    retirar(): void {
+
+        this.cancelar();
+
+    }
+
+
+    // Validar identificadores
     private validarId(
         id: number | null,
         campo: string
     ): void {
 
+        // El ID de una solicitud nueva puede ser null.
+        if (id === null && campo === "id") {
+            return;
+        }
+
+        // Los identificadores de paciente y médico son obligatorios.
         if (
-            id !== null &&
-            (!Number.isSafeInteger(id) || id <= 0)
+            id === null ||
+            !Number.isSafeInteger(id) ||
+            id <= 0
         ) {
 
             throw new Error(
@@ -145,22 +167,16 @@ export class ListaEspera {
 
         }
 
-        if (id === null && campo !== "id") {
-
-            throw new Error(
-                `El campo ${campo} es obligatorio.`
-            );
-
-        }
-
     }
 
 
+    // Validar fecha YYYY-MM-DD
     private validarFecha(fecha: string): void {
 
-        const formatoFecha = /^\d{4}-\d{2}-\d{2}$/;
-
-        if (!formatoFecha.test(fecha)) {
+        if (
+            typeof fecha !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(fecha)
+        ) {
 
             throw new Error(
                 "La fecha solicitada debe tener el formato YYYY-MM-DD."
@@ -174,7 +190,11 @@ export class ListaEspera {
         const mes = Number(partes[1]);
         const dia = Number(partes[2]);
 
-        const fechaValidada = new Date(anio, mes - 1, dia);
+        const fechaValidada = new Date(
+            anio,
+            mes - 1,
+            dia
+        );
 
         if (
             fechaValidada.getFullYear() !== anio ||
@@ -191,6 +211,7 @@ export class ListaEspera {
     }
 
 
+    // Validar fecha y hora de ingreso
     private validarFechaHora(fecha: Date): void {
 
         if (
@@ -207,12 +228,15 @@ export class ListaEspera {
     }
 
 
+    // Validar estados permitidos
     private validarEstado(estado: EstadoListaEspera): void {
 
         const estadosValidos: EstadoListaEspera[] = [
+
             "EN_ESPERA",
             "ASIGNADO",
-            "RETIRADO"
+            "CANCELADO"
+
         ];
 
         if (!estadosValidos.includes(estado)) {
