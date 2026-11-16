@@ -63,12 +63,35 @@ describe('Enfermería: administración y pendiente atómicos', () => {
     expect(llamadas[1]?.[0]).toContain('FOR UPDATE')
     expect(llamadas[1]?.[1]).toEqual([1, horario, horario])
     expect(llamadas[2]?.[0]).toContain('ac.fecha_egreso IS NULL')
+    expect(llamadas[2]?.[0]).toContain('FOR UPDATE')
     expect(llamadas[4]?.[0]).toContain('INSERT INTO consumos_medicacion')
+    expect(llamadas[4]?.[0]).toContain("'pendiente'")
     expect(llamadas[4]?.[1]).toEqual([20, 4, 1, 2])
     expect(llamadas.some(([sql]) => /UPDATE\s+insumos/i.test(sql))).toBe(false)
     expect(mocks.pool.execute).not.toHaveBeenCalled()
+    expect(mocks.conexion.beginTransaction).toHaveBeenCalledOnce()
     expect(mocks.conexion.commit).toHaveBeenCalledOnce()
     expect(mocks.conexion.release).toHaveBeenCalledOnce()
+  })
+
+  it('revalida la cantidad bloqueada si la indicación cambió después de la consulta clínica', async () => {
+    mocks.pool.execute.mockResolvedValueOnce([[indicacion], []]).mockResolvedValueOnce([[], []])
+    responder([{ ...indicacion, cantidad: 2 }])
+    await expect(new AdministrarMedicacion(new AdministracionMedicacionRepositoryMysq()).ejecutar(1, 7, horario))
+      .rejects.toThrow('coincidir con la cantidad indicada')
+    expect(mocks.conexion.execute).toHaveBeenCalledOnce()
+    expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+    expect(mocks.conexion.commit).not.toHaveBeenCalled()
+  })
+
+  it('revierte si MySQL no devuelve un ID válido y no crea el consumo', async () => {
+    responder([indicacion], [], [{ piso: 2 }], { insertId: 0 })
+    await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
+      .rejects.toThrow('ID válido')
+    expect(mocks.conexion.execute).toHaveBeenCalledTimes(4)
+    expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+    expect(mocks.conexion.commit).not.toHaveBeenCalled()
+    expect(mocks.pool.execute).not.toHaveBeenCalled()
   })
 
   it.each(['administracion', 'consumo'])('revierte ambas inserciones si falla %s', async etapa => {
@@ -80,6 +103,7 @@ describe('Enfermería: administración y pendiente atómicos', () => {
     expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
     expect(mocks.conexion.commit).not.toHaveBeenCalled()
     expect(mocks.conexion.release).toHaveBeenCalledOnce()
+    expect(mocks.pool.execute).not.toHaveBeenCalled()
   })
 
   it('recomprueba la dosis con lectura bloqueada y rechaza una administración ya confirmada', async () => {
@@ -111,7 +135,7 @@ describe('Enfermería: administración y pendiente atómicos', () => {
       existeDosisAdministrada: vi.fn().mockResolvedValue(false), administrar: vi.fn(),
     }
     await new AdministrarMedicacion(repo).ejecutar(1, 7, horario)
-    expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, undefined)
+    expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, indicacion.cantidad)
     await expect(new AdministrarMedicacion(repo).ejecutar(1, 7, new Date(horario.getTime() + 3600000)))
       .rejects.toThrow('dosis programada')
   })
@@ -119,9 +143,14 @@ describe('Enfermería: administración y pendiente atómicos', () => {
   it.each([0, -1, 1.5, 2, NaN, Infinity])('rechaza cantidad administrada inválida o diferente de la indicada: %s', async cantidad => {
     responder([indicacion])
     await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, cantidad))
-      .rejects.toThrow('coincidir con la cantidad indicada')
-    expect(mocks.conexion.execute).toHaveBeenCalledOnce()
-    expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+      .rejects.toThrow(cantidad === 2 ? 'coincidir con la cantidad indicada' : 'entero positivo')
+    if (cantidad === 2) {
+      expect(mocks.conexion.execute).toHaveBeenCalledOnce()
+      expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
+    } else {
+      expect(mocks.pool.getConnection).not.toHaveBeenCalled()
+      expect(mocks.conexion.execute).not.toHaveBeenCalled()
+    }
     expect(mocks.conexion.commit).not.toHaveBeenCalled()
   })
 
@@ -137,7 +166,7 @@ describe('Enfermería: administración y pendiente atómicos', () => {
     const valido = cantidad === undefined || cantidad === 1
     expect(res.status).toHaveBeenCalledWith(valido ? 200 : 400)
     if (valido) {
-      expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, cantidad)
+      expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, cantidad ?? indicacion.cantidad)
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ idAdministracionMedicacion: 20 }))
     } else expect(repo.administrar).not.toHaveBeenCalled()
   })

@@ -1,6 +1,5 @@
 
 import type { AdministracionMedicacionRepository } from '../../domain/repositories/administracion_medicacion_repository.js';
-import { event_bus } from '../../../../events/event_bus.js';
 
 export class AdministrarMedicacion {
 
@@ -96,11 +95,6 @@ export class AdministrarMedicacion {
                 horario_programado,
                 cantidad_realmente_administrada
             );
-
-        event_bus.emitir_medicacion_administrada({
-            idAdministracionMedicacion: id_administracion_medicacion,
-            cantidadAdministrada: cantidad_realmente_administrada
-        });
 
         return id_administracion_medicacion;
     }
