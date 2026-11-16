@@ -5,7 +5,7 @@ import { verificarRol } from '../../../../IAM/infraestructure/middlewares/verifi
 
 const router: Router = express.Router();
 
-router.get('/', (req, res) =>
+router.get('/', verificarRol(['Enfermero']), (req, res) =>
     administracionMedicacionController.obtenerTodas(req, res)
 );
 

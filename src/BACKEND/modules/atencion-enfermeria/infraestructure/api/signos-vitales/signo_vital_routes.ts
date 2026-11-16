@@ -14,11 +14,11 @@ router.post(
     }
 );
 
-router.get('/', (req, res) =>
+router.get('/', verificarRol(['Enfermero']), (req, res) =>
     signoVitalController.obtenerTodos(req, res)
 );
 
-router.get('/paciente/:idPaciente', (req, res) =>
+router.get('/paciente/:idPaciente', verificarRol(['Enfermero']), (req, res) =>
     signoVitalController.obtenerPorPaciente(req, res)
 );
 

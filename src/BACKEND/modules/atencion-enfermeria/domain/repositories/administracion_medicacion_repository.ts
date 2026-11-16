@@ -4,7 +4,7 @@ import type { IndicacionMedicacion } from '../entities/indicacion_medicacion.js'
 export interface AdministracionMedicacionRepository {
     obtenerTodas(): Promise<IndicacionMedicacion[]>;
 
-    administrar(
+        administrar(
         id_indicacion_medica: number,
         id_enfermero: number,
         fecha_hora: Date,
@@ -18,6 +18,7 @@ export interface AdministracionMedicacionRepository {
         fecha: string;
         hora_inicio: string;
         frecuencia_horas: number;
+        cantidad: number;
     } | null>;
 
     existeDosisAdministrada(

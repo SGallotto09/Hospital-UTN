@@ -28,8 +28,12 @@ interface Protocolo {
 const pacientes = ref<Paciente[]>([]);
 const protocolos = ref<Protocolo[]>([]);
 const paciente_seleccionado = ref('');
+const motivo_ingreso = ref<'Prequirurgico' | 'Neumonia'>('Prequirurgico');
+
 const cargando = ref(false);
+const generando = ref(false);
 const actualizando = ref<number | null>(null);
+
 const mensaje = ref('');
 const error = ref('');
 
@@ -45,7 +49,9 @@ async function cargar_pacientes() {
 
         pacientes.value = await respuesta.json() as Paciente[];
     } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Error al cargar pacientes.';
+        error.value = e instanceof Error
+            ? e.message
+            : 'Error al cargar pacientes.';
     }
 }
 
@@ -68,14 +74,63 @@ async function cargar_protocolos() {
         const resultado = await respuesta.json();
 
         if (!respuesta.ok) {
-            throw new Error(resultado.mensaje || 'No se pudieron cargar los protocolos.');
+            throw new Error(
+                resultado.mensaje || 'No se pudieron cargar los protocolos.'
+            );
         }
 
         protocolos.value = resultado.protocolos;
     } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Error al cargar protocolos.';
+        error.value = e instanceof Error
+            ? e.message
+            : 'Error al cargar protocolos.';
     } finally {
         cargando.value = false;
+    }
+}
+
+async function generar_protocolo() {
+    if (!paciente_seleccionado.value) {
+        error.value = 'Seleccioná un paciente.';
+        return;
+    }
+
+    generando.value = true;
+    error.value = '';
+    mensaje.value = '';
+
+    try {
+        const respuesta = await fetch('/api/protocolos', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                id_paciente: Number(paciente_seleccionado.value),
+                motivo_ingreso: motivo_ingreso.value
+            })
+        });
+
+        const resultado = await respuesta.json();
+
+        if (!respuesta.ok) {
+            throw new Error(
+                resultado.mensaje || 'No se pudo generar el protocolo.'
+            );
+        }
+
+        await cargar_protocolos();
+
+        if (!error.value) {
+            mensaje.value = 'Protocolo generado correctamente.';
+        }
+    } catch (e) {
+        error.value = e instanceof Error
+            ? e.message
+            : 'Error al generar el protocolo.';
+    } finally {
+        generando.value = false;
     }
 }
 
@@ -104,13 +159,17 @@ async function actualizar_tarea(tarea: Tarea) {
         const resultado = await respuesta.json();
 
         if (!respuesta.ok) {
-            throw new Error(resultado.mensaje || 'No se pudo actualizar la tarea.');
+            throw new Error(
+                resultado.mensaje || 'No se pudo actualizar la tarea.'
+            );
         }
 
         tarea.estado = nuevo_estado;
         mensaje.value = 'Estado de la tarea actualizado correctamente.';
     } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Error al actualizar la tarea.';
+        error.value = e instanceof Error
+            ? e.message
+            : 'Error al actualizar la tarea.';
     } finally {
         actualizando.value = null;
     }
@@ -125,7 +184,9 @@ function nombre_protocolo(tipo: string): string {
 function fecha_formateada(fecha: string): string {
     const valor = new Date(fecha);
 
-    if (Number.isNaN(valor.getTime())) return 'Fecha no disponible';
+    if (Number.isNaN(valor.getTime())) {
+        return 'Fecha no disponible';
+    }
 
     return valor.toLocaleString('es-AR');
 }
@@ -161,6 +222,27 @@ onMounted(cargar_pacientes);
                     — Habitación {{ paciente.habitacion }}
                 </option>
             </select>
+        </section>
+
+        <section class="selector-section">
+            <label for="motivo">Motivo de ingreso</label>
+
+            <select
+                id="motivo"
+                v-model="motivo_ingreso"
+            >
+                <option value="Prequirurgico">Prequirúrgico</option>
+                <option value="Neumonia">Neumonía</option>
+            </select>
+
+            <button
+                type="button"
+                class="generate-button"
+                :disabled="!paciente_seleccionado || generando"
+                @click="generar_protocolo"
+            >
+                {{ generando ? 'Generando...' : 'Generar protocolo' }}
+            </button>
         </section>
 
         <div v-if="error" class="message error" role="alert">
@@ -201,6 +283,7 @@ onMounted(cargar_pacientes);
                         <h2>{{ nombre_protocolo(protocolo.tipo_protocolo) }}</h2>
                         <p>Generado: {{ fecha_formateada(protocolo.fecha_generacion) }}</p>
                     </div>
+
                     <span class="protocol-count">
                         {{ protocolo.tareas.length }} tareas
                     </span>
@@ -214,6 +297,7 @@ onMounted(cargar_pacientes);
                     >
                         <div class="task-info">
                             <strong>{{ tarea.descripcion }}</strong>
+
                             <span
                                 class="task-status"
                                 :class="tarea.estado === 'Completada' ? 'completed' : 'pending'"
@@ -292,6 +376,26 @@ onMounted(cargar_pacientes);
     border-radius: 8px;
     background: white;
     color: #24384b;
+}
+
+.generate-button {
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: #087fc4;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.generate-button:hover:not(:disabled) {
+    background: #066ba5;
+}
+
+.generate-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .empty-state,
