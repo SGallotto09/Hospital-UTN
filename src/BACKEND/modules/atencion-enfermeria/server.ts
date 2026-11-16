@@ -5,6 +5,8 @@ import pacienteInternadoRoutes from './infraestructure/api/pacientes-internados/
 import administracionMedicacionRoutes from './infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js';
 import dashboardRoutes from './infraestructure/api/dashboard/dashboard_routes.js';
 
+
+
 const app = express();
 const PORT = 3001;
 

@@ -12,6 +12,10 @@ import { RegistroRoutes } from "./modules/IAM/infraestructure/api/RegistroRoutes
 import { Database } from "./database/connectionDB.js";
 import session from "express-session";
 import "dotenv/config";
+import signoVitalRoutes from "./modules/atencion-enfermeria/infraestructure/api/signos-vitales/signo_vital_routes.js";
+import pacienteInternadoRoutes from "./modules/atencion-enfermeria/infraestructure/api/pacientes-internados/paciente_internado_routes.js";
+import administracionMedicacionRoutes from "./modules/atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_routes.js";
+import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/dashboard/dashboard_routes.js";
 
 for (const nombre of ["SESSION_SECRET", "DB_HOST", "DB_USER", "DB_NAME"]) {
     if (!process.env[nombre]?.trim()) throw new Error(`Falta configurar ${nombre}`);
@@ -60,6 +64,12 @@ const registroRoutes = new RegistroRoutes(registroController);
 
 app.use("/api/auth", authRoutes.obtenerRouter());
 app.use("/api/auth", registroRoutes.obtenerRouter());
+
+
+app.use("/api/signos-vitales", signoVitalRoutes);
+app.use("/api/pacientes-internados", pacienteInternadoRoutes);
+app.use("/api/administracion-medicacion", administracionMedicacionRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 const database = Database.getInstance();
 

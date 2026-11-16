@@ -1,10 +1,17 @@
+
 import { Router } from 'express';
 import { signoVitalController } from './signo_vital_dependencies.js';
+import { verificarRol } from '../../../../IAM/infraestructure/middlewares/verificarRol.js';
 
 const router: Router = Router();
 
-router.post('/', (req, res) =>
-    signoVitalController.registrar(req, res)
+router.post(
+    '/',
+    verificarRol(['Enfermero']),
+    (req, res) => {
+        req.body.id_enfermero = req.session.usuarioId;
+        return signoVitalController.registrar(req, res);
+    }
 );
 
 router.get('/', (req, res) =>
