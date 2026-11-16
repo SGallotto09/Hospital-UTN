@@ -2,6 +2,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
+import FacturarPrestacionForm from '../components/FacturarPrestacionForm.vue';
+
+
 type TipoCobertura = 'publica' | 'prepaga' | 'particular';
 
 interface Cuenta {
@@ -412,6 +415,14 @@ async function calcularPrestacion() {
           una prestación ni genera un reclamo.
         </p>
       </section>
+
+<!-- FACTURAR PRESTACIÓN - HU 1.1 -->
+<div class="panel-ancho">
+  <FacturarPrestacionForm
+    :id-cuenta-inicial="idCuentaCargo"
+  />
+</div>
+
     </div>
   </main>
 </template>
