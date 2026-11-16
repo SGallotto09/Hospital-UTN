@@ -1,7 +1,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import HistoriaClinicaNav from '../components/historia_clinica_nav.vue';
 
 interface Paciente {
     id: number;
@@ -191,8 +190,6 @@ onMounted(async () => {
 
 <template>
 <div class="historia-clinica">
-
-    <HistoriaClinicaNav />
 
     <!-- CABECERA -->
     <header class="topbar">
