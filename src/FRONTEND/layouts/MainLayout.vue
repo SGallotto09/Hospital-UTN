@@ -1,3 +1,36 @@
+<script setup lang="ts">
+import { ref } from "vue";
+import { useRouter } from "vue-router";
+
+const router = useRouter();
+const cerrandoSesion = ref(false);
+const errorSalida = ref("");
+
+async function cerrarSesion() {
+    if (cerrandoSesion.value) return;
+    errorSalida.value = "";
+    cerrandoSesion.value = true;
+
+    try {
+        const respuesta = await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "same-origin",
+        });
+
+        if (respuesta.status !== 200) {
+            errorSalida.value = "No se pudo cerrar sesión. Intentá nuevamente.";
+            return;
+        }
+
+        await router.replace("/login");
+    } catch {
+        errorSalida.value = "No se pudo conectar para cerrar sesión. Intentá nuevamente.";
+    } finally {
+        cerrandoSesion.value = false;
+    }
+}
+</script>
+
 <template>
 <div class="layout">
 
@@ -62,15 +95,24 @@
     <div class="sidebar-user">
 
     <div class="user-avatar">
-        MT
+        H
     </div>
 
     <div class="user-info">
-        <strong>Martín Torres</strong>
-        <span>Enfermero</span>
+        <strong>Hospital-UTN</strong>
+        <span>Acceso al sistema</span>
+        <span v-if="errorSalida" role="alert">{{ errorSalida }}</span>
     </div>
 
-    <button class="logout-button">
+    <button
+        class="logout-button"
+        type="button"
+        aria-label="Cerrar sesión"
+        title="Cerrar sesión"
+        :disabled="cerrandoSesion"
+        :aria-busy="cerrandoSesion"
+        @click="cerrarSesion"
+    >
         ↪
     </button>
 
