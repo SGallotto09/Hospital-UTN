@@ -1,41 +1,48 @@
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+
+
+import {
+  idPaciente,
+  cuenta,
+  idCuentaCargo,
+  mensajeCuenta,
+  tipoCobertura,
+  valorBase,
+  copago,
+  calculo,
+  mensajeCalculo,
+  concepto,
+  importe,
+  mensajeCargo
+} from '../state/estadoFacturacion';
+
+
+import type {
+  Cuenta,
+  ResultadoCalculo
+} from '../state/estadoFacturacion';
 
 import FacturarPrestacionForm from '../components/FacturarPrestacionForm.vue';
 
 
-type TipoCobertura = 'publica' | 'prepaga' | 'particular';
 
-interface Cuenta {
-  id: number;
-  idPaciente: number;
-}
-
-interface ResultadoCalculo {
-  montoPaciente: number;
-  montoCobertura: number;
-}
-
-const idPaciente = ref<number | null>(null);
-const cuenta = ref<Cuenta | null>(null);
-
-const idCuentaCargo = ref<number | null>(null);
-const concepto = ref('');
-const importe = ref<number | null>(null);
-
-const tipoCobertura = ref<TipoCobertura>('particular');
-const valorBase = ref<number>(15000);
-const copago = ref<number>(3000);
-const calculo = ref<ResultadoCalculo | null>(null);
-
-const mensajeCuenta = ref('');
-const mensajeCargo = ref('');
-const mensajeCalculo = ref('');
-
+// Estados de carga
 const cargandoCuenta = ref(false);
 const cargandoCargo = ref(false);
 const cargandoCalculo = ref(false);
+
+watch(idPaciente, (nuevoId, anteriorId) => {
+  if (nuevoId === anteriorId) return;
+
+  // Limpiar los datos del paciente anterior.
+  cuenta.value = null;
+  idCuentaCargo.value = null;
+  mensajeCuenta.value = '';
+});
+
+
 
 function dinero(valor: number): string {
   return new Intl.NumberFormat('es-AR', {
@@ -219,6 +226,20 @@ async function calcularPrestacion() {
     cargandoCalculo.value = false;
   }
 }
+
+onMounted(async () => {
+  if (
+    cuenta.value !== null &&
+    idPaciente.value === cuenta.value.idPaciente
+  ) {
+    const idCuentaGuardado = idCuentaCargo.value;
+
+    await buscarCuenta();
+
+    idCuentaCargo.value = idCuentaGuardado;
+  }
+});
+
 </script>
 
 <template>

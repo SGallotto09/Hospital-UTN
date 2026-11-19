@@ -67,11 +67,13 @@ export class FacturarPrestacion {
       );
     }
 
-    if (!importeValido(datos.valorBase)) {
-      throw new Error(
-        'El valor base de la prestación no es válido'
-      );
-    }
+
+if (!importeValido(datos.valorBase) || datos.valorBase <= 0) {
+  throw new Error(
+    'El valor base de la prestación debe ser mayor a cero'
+  );
+}
+
 
     let estrategia: ICoberturaStrategy;
     let entidadDestino: string | null = null;
