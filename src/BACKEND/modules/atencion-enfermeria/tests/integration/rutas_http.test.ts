@@ -9,13 +9,27 @@ import { verificarSesion } from '../../../IAM/infraestructure/middlewares/verifi
 const mocks = vi.hoisted(() => ({
     administrar: vi.fn(async (req: Request, res: Response) =>
         res.status(201).json({ autor: req.session.usuarioId })),
+    obtenerPermisos: vi.fn(async (req: Request, res: Response) =>
+        res.status(200).json({ puedeCrearIndicacion: req.session.rol === 'Médico' })),
+    crearIndicacion: vi.fn(async (req: Request, res: Response) =>
+        res.status(201).json({ medico: req.session.usuarioId })),
+    obtenerOpcionesIndicacion: vi.fn(async (_req: Request, res: Response) => res.status(200).json({ pacientes: [], insumos: [] })),
+    obtenerHistorial: vi.fn(async (_req: Request, res: Response) => res.status(200).json([])),
+    obtenerTodas: vi.fn(async (_req: Request, res: Response) => res.status(200).json([])),
     registrar: vi.fn(async (req: Request, res: Response) =>
         res.status(201).json({ autor: req.session.usuarioId })),
     obtenerDashboard: vi.fn(async (_req: Request, res: Response) => res.status(200).json([]))
 }));
 
 vi.mock('../../infraestructure/api/administracion-medicacion/administracion_medicacion_dependencies.js', () => ({
-    administracionMedicacionController: { administrar: mocks.administrar }
+    administracionMedicacionController: {
+        administrar: mocks.administrar,
+        obtenerPermisos: mocks.obtenerPermisos,
+        crearIndicacion: mocks.crearIndicacion,
+        obtenerOpcionesIndicacion: mocks.obtenerOpcionesIndicacion,
+        obtenerHistorial: mocks.obtenerHistorial,
+        obtenerTodas: mocks.obtenerTodas,
+    }
 }));
 vi.mock('../../infraestructure/api/signos-vitales/signo_vital_dependencies.js', () => ({
     signoVitalController: { registrar: mocks.registrar }
@@ -56,6 +70,48 @@ afterEach(async () => {
 });
 
 describe('autorización HTTP de rutas de Enfermería', () => {
+    it('permite a Enfermería consultar medicación y reserva las opciones de alta a Médico', async () => {
+        await iniciarServidor();
+        const permisosEnfermero = await fetch(`${base_url}/api/administracion-medicacion/permisos`, {
+            headers: { 'x-test-user': '7', 'x-test-role': 'Enfermero' }
+        });
+        await expect(permisosEnfermero.json()).resolves.toEqual({ puedeCrearIndicacion: false });
+        const enfermero = await fetch(`${base_url}/api/administracion-medicacion`, {
+            headers: { 'x-test-user': '7', 'x-test-role': 'Enfermero' }
+        });
+        expect(enfermero.status).toBe(200);
+        expect(mocks.obtenerTodas).toHaveBeenCalledOnce();
+
+        const opcionesEnfermero = await fetch(`${base_url}/api/administracion-medicacion/opciones-indicacion`, {
+            headers: { 'x-test-user': '7', 'x-test-role': 'Enfermero' }
+        });
+        expect(opcionesEnfermero.status).toBe(403);
+
+        const opcionesMedico = await fetch(`${base_url}/api/administracion-medicacion/opciones-indicacion`, {
+            headers: { 'x-test-user': '8', 'x-test-role': 'Médico' }
+        });
+        expect(opcionesMedico.status).toBe(200);
+        expect(mocks.obtenerOpcionesIndicacion).toHaveBeenCalledOnce();
+        const permisosMedico = await fetch(`${base_url}/api/administracion-medicacion/permisos`, {
+            headers: { 'x-test-user': '8', 'x-test-role': 'Médico' }
+        });
+        await expect(permisosMedico.json()).resolves.toEqual({ puedeCrearIndicacion: true });
+    });
+
+    it('reserva la creación de indicaciones a Médico y usa el usuario de sesión', async () => {
+        await iniciarServidor();
+        const denegada = await fetch(`${base_url}/api/administracion-medicacion/indicaciones`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-user': '8', 'x-test-role': 'Enfermero' }, body: '{}'
+        });
+        expect(denegada.status).toBe(403);
+        const permitida = await fetch(`${base_url}/api/administracion-medicacion/indicaciones`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-user': '8', 'x-test-role': 'Médico' }, body: '{}'
+        });
+        expect(permitida.status).toBe(201);
+        await expect(permitida.json()).resolves.toEqual({ medico: 8 });
+        expect(mocks.crearIndicacion).toHaveBeenCalledOnce();
+    });
+
     it.each([
         ['/api/administracion-medicacion', 'POST'],
         ['/api/signos-vitales', 'POST']

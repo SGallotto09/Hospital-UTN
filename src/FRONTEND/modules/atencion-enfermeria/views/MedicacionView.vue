@@ -1,7 +1,7 @@
 
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { computed, ref, onMounted } from "vue";
 
 interface DosisProgramada {
     id_indicacion_medica: number;
@@ -12,7 +12,7 @@ interface DosisProgramada {
     medicamento: string;
     cantidad: number;
     horario_programado: string;
-    estado: "Pendiente" | "Administrada";
+    estado: "Futura" | "Pendiente" | "Administrada";
 }
 
 const medicaciones = ref<DosisProgramada[]>([]);
@@ -20,6 +20,51 @@ const mensaje = ref("");
 const cargando = ref(false);
 const administrando = ref<string | null>(null);
 const cantidades_administradas = ref<Record<string, string>>({});
+const puede_crear_indicaciones = ref(false);
+const puede_administrar = ref(false);
+const mostrar_formulario_indicacion = ref(false);
+const pacientes_internados = ref<{ id: number; nombre: string; apellido: string }[]>([]);
+const insumos = ref<{ id: number; nombre: string }[]>([]);
+const error_opciones_indicacion = ref('');
+const historial = ref<{ id: number; nombre: string; apellido: string; medicamento: string; cantidad: number; fecha_hora: string; enfermero: string }[]>([]);
+const nueva_indicacion = ref({ id_paciente: '', id_insumo: '', cantidad: '', fecha: '', hora_inicio: '', frecuencia_horas: '' });
+
+interface GrupoPaciente {
+    id: number;
+    nombre: string;
+    apellido: string;
+    habitacion: number;
+    indicaciones: { id: number; medicamento: string; cantidad: number; dosis: DosisProgramada[] }[];
+}
+
+const medicaciones_agrupadas = computed<GrupoPaciente[]>(() => {
+    const pacientes = new Map<number, GrupoPaciente>();
+    for (const dosis of medicaciones.value) {
+        let paciente = pacientes.get(dosis.id_paciente);
+        if (!paciente) {
+            paciente = {
+                id: dosis.id_paciente,
+                nombre: dosis.nombre,
+                apellido: dosis.apellido,
+                habitacion: dosis.habitacion,
+                indicaciones: [],
+            };
+            pacientes.set(paciente.id, paciente);
+        }
+        let indicacion = paciente.indicaciones.find((item) => item.id === dosis.id_indicacion_medica);
+        if (!indicacion) {
+            indicacion = {
+                id: dosis.id_indicacion_medica,
+                medicamento: dosis.medicamento,
+                cantidad: dosis.cantidad,
+                dosis: [],
+            };
+            paciente.indicaciones.push(indicacion);
+        }
+        indicacion.dosis.push(dosis);
+    }
+    return [...pacientes.values()];
+});
 
 const pendientes = () =>
     medicaciones.value.filter(
@@ -67,12 +112,74 @@ async function cargarMedicaciones(): Promise<void> {
             const clave = obtenerClave(medicacion);
             cantidades_administradas.value[clave] ??= String(medicacion.cantidad);
         }
+        await cargarHistorial();
+        await cargarOpcionesIndicacion();
     } catch (error) {
         mensaje.value = error instanceof Error
             ? error.message
             : "Error al cargar las medicaciones";
     } finally {
         cargando.value = false;
+    }
+}
+
+async function cargarHistorial(): Promise<void> {
+    const respuesta = await fetch('/api/administracion-medicacion/historial', { credentials: 'include' });
+    if (respuesta.ok) historial.value = await respuesta.json();
+}
+
+async function cargarOpcionesIndicacion(): Promise<void> {
+    error_opciones_indicacion.value = '';
+    try {
+        const permisos = await fetch('/api/administracion-medicacion/permisos', { credentials: 'include' });
+        if (!permisos.ok) throw new Error('No se pudo verificar el permiso para crear indicaciones.');
+        const { puedeCrearIndicacion } = await permisos.json();
+        puede_crear_indicaciones.value = puedeCrearIndicacion;
+        puede_administrar.value = !puedeCrearIndicacion;
+        if (!puedeCrearIndicacion) return;
+
+        const respuesta = await fetch('/api/administracion-medicacion/opciones-indicacion', { credentials: 'include' });
+        if (!respuesta.ok) {
+            const resultado = await respuesta.json().catch(() => ({}));
+            throw new Error(resultado.mensaje || 'No se pudieron cargar pacientes e insumos.');
+        }
+        const opciones = await respuesta.json();
+        pacientes_internados.value = opciones.pacientes;
+        insumos.value = opciones.insumos;
+        puede_crear_indicaciones.value = true;
+    } catch {
+        error_opciones_indicacion.value = 'No se pudo conectar para cargar pacientes e insumos.';
+    }
+}
+
+async function crearIndicacion(): Promise<void> {
+    mensaje.value = '';
+    const datos = {
+        id_paciente: Number(nueva_indicacion.value.id_paciente),
+        id_insumo: Number(nueva_indicacion.value.id_insumo),
+        cantidad: Number(nueva_indicacion.value.cantidad),
+        fecha: nueva_indicacion.value.fecha,
+        hora_inicio: nueva_indicacion.value.hora_inicio,
+        frecuencia_horas: Number(nueva_indicacion.value.frecuencia_horas),
+    };
+    if (!datos.id_paciente || !datos.id_insumo || !Number.isSafeInteger(datos.cantidad) || datos.cantidad <= 0 ||
+        !Number.isSafeInteger(datos.frecuencia_horas) || datos.frecuencia_horas <= 0 || !datos.fecha || !datos.hora_inicio) {
+        mensaje.value = 'Completá todos los campos con valores válidos.';
+        return;
+    }
+    try {
+        const respuesta = await fetch('/api/administracion-medicacion/indicaciones', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos),
+        });
+        const resultado = await respuesta.json();
+        if (!respuesta.ok) throw new Error(resultado.mensaje || 'No se pudo crear la indicación.');
+        mensaje.value = resultado.mensaje;
+        mostrar_formulario_indicacion.value = false;
+        nueva_indicacion.value = { id_paciente: '', id_insumo: '', cantidad: '', fecha: '', hora_inicio: '', frecuencia_horas: '' };
+        await cargarMedicaciones();
+    } catch (error) {
+        mensaje.value = error instanceof Error ? error.message : 'No se pudo crear la indicación.';
     }
 }
 
@@ -168,6 +275,32 @@ onMounted(cargarMedicaciones);
             </div>
         </header>
 
+        <button v-if="puede_crear_indicaciones" class="admin-button new-order" @click="mostrar_formulario_indicacion = !mostrar_formulario_indicacion">
+            + Nueva indicación
+        </button>
+        <p v-if="error_opciones_indicacion" class="message error" role="alert">{{ error_opciones_indicacion }}</p>
+        <form v-if="puede_crear_indicaciones && mostrar_formulario_indicacion" class="order-form" @submit.prevent="crearIndicacion">
+            <label>Paciente internado
+                <select v-model="nueva_indicacion.id_paciente" required>
+                    <option value="" disabled>Seleccionar paciente</option>
+                    <option v-if="pacientes_internados.length === 0" value="" disabled>No hay pacientes internados disponibles</option>
+                    <option v-for="paciente in pacientes_internados" :key="paciente.id" :value="String(paciente.id)">{{ paciente.apellido }}, {{ paciente.nombre }}</option>
+                </select>
+            </label>
+            <label>Medicamento o insumo
+                <select v-model="nueva_indicacion.id_insumo" required>
+                    <option value="" disabled>Seleccionar insumo</option>
+                    <option v-if="insumos.length === 0" value="" disabled>No hay insumos registrados</option>
+                    <option v-for="insumo in insumos" :key="insumo.id" :value="String(insumo.id)">{{ insumo.nombre }}</option>
+                </select>
+            </label>
+            <label>Cantidad<input v-model="nueva_indicacion.cantidad" type="number" min="1" step="1" required /></label>
+            <label>Fecha de inicio<input v-model="nueva_indicacion.fecha" type="date" required /></label>
+            <label>Hora de inicio<input v-model="nueva_indicacion.hora_inicio" type="time" required /></label>
+            <label>Frecuencia (horas)<input v-model="nueva_indicacion.frecuencia_horas" type="number" min="1" step="1" required /></label>
+            <button class="admin-button" type="submit">Guardar indicación</button>
+        </form>
+
         <p v-if="mensaje" class="message">
             {{ mensaje }}
         </p>
@@ -182,89 +315,73 @@ onMounted(cargarMedicaciones);
             </p>
 
             <article
-                v-for="medicacion in medicaciones"
-                :key="obtenerClave(medicacion)"
-                class="medication-card"
-                :class="{
-                    completed: medicacion.estado === 'Administrada'
-                }"
+                v-for="paciente in medicaciones_agrupadas"
+                :key="paciente.id"
+                class="patient-group"
             >
-                <div class="patient">
-                    <div class="avatar">
-                        {{ medicacion.nombre.charAt(0) }}
-                    </div>
-
+                <header class="patient">
+                    <div class="avatar">{{ paciente.nombre.charAt(0) }}</div>
                     <div>
-                        <strong>
-                            {{ medicacion.nombre }} {{ medicacion.apellido }}
-                        </strong>
-                        <span>Habitación {{ medicacion.habitacion }}</span>
+                        <strong>{{ paciente.nombre }} {{ paciente.apellido }}</strong>
+                        <span>Habitación {{ paciente.habitacion }}</span>
                     </div>
-                </div>
+                </header>
 
-                <div class="medication-info">
-                    <span class="label">MEDICACIÓN</span>
-                    <strong>{{ medicacion.medicamento }}</strong>
-                    <span>Cantidad indicada: {{ medicacion.cantidad }}</span>
-
-                <div
-                    v-if="medicacion.estado === 'Pendiente'"
-                    class="quantity-field"
+                <section
+                    v-for="indicacion in paciente.indicaciones"
+                    :key="indicacion.id"
+                    class="indication-group"
                 >
-                    <label :for="`cantidad-${obtenerClave(medicacion)}`">
-                        Cantidad realmente administrada
-                    </label>
+                    <div class="medication-info">
+                        <span class="label">MEDICACIÓN</span>
+                        <strong>{{ indicacion.medicamento }}</strong>
+                        <span>Cantidad indicada: {{ indicacion.cantidad }}</span>
+                    </div>
 
-                    <input
-                        :id="`cantidad-${obtenerClave(medicacion)}`"
-                        v-model="cantidades_administradas[obtenerClave(medicacion)]"
-                        type="number"
-                        min="1"
-                        :max="medicacion.cantidad"
-                        step="1"
-                        placeholder="Ingresar cantidad"
-                        :disabled="administrando !== null"
-                    />
-                </div>
-            </div>
+                    <ul class="dose-list">
+                        <li
+                            v-for="medicacion in indicacion.dosis"
+                            :key="obtenerClave(medicacion)"
+                            class="dose-row"
+                        >
+                            <div class="dose-schedule">
+                                <strong>{{ obtenerFecha(medicacion) }} – {{ obtenerHorario(medicacion) }}</strong>
+                                <span class="dose-status" :class="medicacion.estado.toLowerCase()">
+                                    {{ medicacion.estado === 'Futura' ? 'Programada' : medicacion.estado }}
+                                </span>
+                            </div>
 
-                <div class="schedule">
-                    <span class="label">HORARIO PROGRAMADO</span>
-                    <strong>{{ obtenerHorario(medicacion) }}</strong>
-                    <span>{{ obtenerFecha(medicacion) }}</span>
-                </div>
-
-                <div class="status">
-                    <span
-                        :class="{
-                            done: medicacion.estado === 'Administrada',
-                            pending: medicacion.estado === 'Pendiente'
-                        }"
-                    >
-                        {{
-                            medicacion.estado === "Administrada"
-                                ? "✓ Administrada"
-                                : "Pendiente"
-                        }}
-                    </span>
-                </div>
-
-                <button
-                    v-if="medicacion.estado === 'Pendiente'"
-                    class="admin-button"
-                    :disabled="administrando !== null"
-                    @click="administrarMedicacion(medicacion)"
-                >
-                    {{
-                        administrando === obtenerClave(medicacion)
-                            ? "Registrando..."
-                            : "Administrar"
-                    }}
-                </button>
-
-                <span v-else class="completed-text">
-                    Registrada
-                </span>
+                            <div
+                                v-if="medicacion.estado === 'Pendiente' && puede_administrar"
+                                class="dose-actions"
+                            >
+                                <label :for="`cantidad-${obtenerClave(medicacion)}`">
+                                    Cantidad realmente administrada
+                                </label>
+                                <input
+                                    :id="`cantidad-${obtenerClave(medicacion)}`"
+                                    v-model="cantidades_administradas[obtenerClave(medicacion)]"
+                                    type="number"
+                                    min="1"
+                                    :max="medicacion.cantidad"
+                                    step="1"
+                                    placeholder="Ingresar cantidad"
+                                    :disabled="administrando !== null"
+                                />
+                                <button
+                                    class="admin-button"
+                                    :disabled="administrando !== null"
+                                    @click="administrarMedicacion(medicacion)"
+                                >
+                                    {{ administrando === obtenerClave(medicacion) ? 'Registrando...' : 'Administrar' }}
+                                </button>
+                            </div>
+                            <span v-else-if="medicacion.estado === 'Administrada'" class="completed-text">
+                                Registrada
+                            </span>
+                        </li>
+                    </ul>
+                </section>
             </article>
         </section>
 
@@ -276,10 +393,28 @@ onMounted(cargarMedicaciones);
                 del inventario.
             </p>
         </section>
+
+        <section class="history-section">
+            <h2>Historial de administraciones</h2>
+            <p v-if="historial.length === 0" class="empty-message">Todavía no hay administraciones registradas.</p>
+            <div v-for="registro in historial" :key="registro.id" class="history-row">
+                <span>{{ registro.nombre }} {{ registro.apellido }}</span>
+                <span>{{ registro.medicamento }} · {{ registro.cantidad }}</span>
+                <span>{{ new Date(registro.fecha_hora).toLocaleString('es-AR') }}</span>
+                <span>Enfermero/a: {{ registro.enfermero }}</span>
+            </div>
+        </section>
     </div>
 </template>
 
 <style scoped>
+.order-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0; padding: 18px; background: white; border: 1px solid #e5ebf1; border-radius: 10px; }
+.order-form label { display: flex; flex-direction: column; gap: 6px; color: #526879; font-size: 12px; }
+.order-form input, .order-form select { padding: 9px; border: 1px solid #dce5eb; border-radius: 7px; }
+.new-order { margin-bottom: 14px; }
+.history-section { margin-top: 28px; }
+.history-section h2 { color: #163247; font-size: 20px; }
+.history-row { display: flex; flex-wrap: wrap; gap: 16px; padding: 12px; margin-bottom: 8px; background: white; border: 1px solid #e5ebf1; border-radius: 8px; color: #526879; font-size: 12px; }
 .quantity-field {
     display: flex;
     flex-direction: column;
@@ -379,19 +514,87 @@ h1 {
     gap: 12px;
 }
 
-.medication-card {
-    display: grid;
-    grid-template-columns: 1.5fr 1.3fr 1fr 1fr auto;
-    align-items: center;
-    gap: 20px;
-    padding: 20px;
+.patient-group {
+    padding: 22px;
     background: white;
     border: 1px solid #e5ebf1;
     border-radius: 11px;
 }
 
-.medication-card.completed {
-    opacity: 0.7;
+.patient-group > .patient {
+    padding-bottom: 16px;
+    border-bottom: 1px solid #e5ebf1;
+}
+
+.indication-group {
+    padding-top: 16px;
+}
+
+.dose-list {
+    padding: 0;
+    margin: 10px 0 0;
+    list-style: none;
+}
+
+.dose-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 0;
+    border-top: 1px solid #eef2f5;
+}
+
+.dose-schedule {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    color: #263f51;
+    font-size: 13px;
+}
+
+.dose-status {
+    display: inline-block;
+    padding: 6px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.dose-status.administrada {
+    background: #e8f7ef;
+    color: #238452;
+}
+
+.dose-status.pendiente {
+    background: #fff5df;
+    color: #ad7114;
+}
+
+.dose-status.futura {
+    background: #eaf2fb;
+    color: #416b94;
+}
+
+.dose-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.dose-actions label {
+    color: #526879;
+    font-size: 11px;
+}
+
+.dose-actions input {
+    width: 130px;
+    padding: 8px;
+    border: 1px solid #dce5eb;
+    border-radius: 7px;
 }
 
 .patient {
@@ -431,24 +634,6 @@ h1 {
 .medication-info strong,
 .schedule strong {
     margin-top: 5px;
-}
-
-.status span {
-    display: inline-block;
-    padding: 6px 9px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-}
-
-.status .done {
-    background: #e8f7ef;
-    color: #238452;
-}
-
-.status .pending {
-    background: #fff5df;
-    color: #ad7114;
 }
 
 .admin-button {
@@ -508,8 +693,8 @@ h1 {
         padding: 24px;
     }
 
-    .medication-card {
-        grid-template-columns: 1fr;
+    .dose-actions {
+        width: 100%;
     }
 }
 </style>

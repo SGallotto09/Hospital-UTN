@@ -13,6 +13,21 @@
 - Se valida cantidad contra la indicación y se comprueba stock antes de guardar, pero esa lectura no reserva stock. El inventario puede agotarse antes del procesamiento; Recursos-Camas envía esos consumos a revisión.
 - No se encontró un archivo de esquema SQL y no fue posible consultar `information_schema` desde el entorno durante la implementación. No se afirma que `consumos_medicacion.id_administracion` sea único; debe confirmarlo el responsable de la base antes de depender de ello.
 
+### Indicaciones y consulta del historial
+
+- La creaciÃ³n de indicaciones estÃ¡ protegida para el rol `MÃ©dico`; el `id_medico`
+  enviado a MySQL se toma de `req.session.usuarioId`, nunca del body. IAM registra
+  cuentas y roles en `usuarios`, pero el cÃ³digo no confirma si
+  `indicacion_medica.id_medico` referencia `usuarios.id` o una entidad mÃ©dica
+  distinta. Esa relaciÃ³n debe contrastarse con las claves forÃ¡neas de la base
+  configurada antes de activar el alta en otro entorno.
+- El historial obtiene la cantidad de la indicaciÃ³n relacionada porque
+  `administracion_medicacion` no guarda un snapshot de la cantidad administrada.
+  Una modificaciÃ³n externa posterior de la indicaciÃ³n podrÃ­a cambiar el valor
+  mostrado para una administraciÃ³n pasada.
+- La pantalla muestra el alta solo si el endpoint protegido de opciones autoriza
+  al usuario. La autorizaciÃ³n efectiva permanece en la API.
+
 ## Protocolos
 
 - Al fallar la inserción de una tarea, el repositorio elimina explícitamente las

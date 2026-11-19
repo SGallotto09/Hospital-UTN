@@ -16,6 +16,34 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.restoreAllMocks());
 
 describe('persistencia de administración de medicación', () => {
+    it('crea una indicación usando el médico de sesión y valida paciente e insumo', async () => {
+        responder([{ id: 30 }], [{ id: 4 }], { insertId: 41 });
+        const id = await new AdministracionMedicacionRepositoryMysq().crearIndicacion({
+            id_medico: 9, id_paciente: 30, id_insumo: 4, cantidad: 2,
+            fecha: '2026-12-01', hora_inicio: '08:00', frecuencia_horas: 6,
+        });
+        expect(id).toBe(41);
+        expect(mocks.execute.mock.calls[2]?.[0]).toContain('INSERT INTO indicacion_medica');
+        expect(mocks.execute.mock.calls[2]?.[1]).toEqual([9, 30, 4, 2, '2026-12-01', '08:00', 6]);
+    });
+
+    it('rechaza paciente sin internación activa e insumo inexistente', async () => {
+        const repo = new AdministracionMedicacionRepositoryMysq();
+        responder([]);
+        await expect(repo.crearIndicacion({ id_medico: 9, id_paciente: 30, id_insumo: 4, cantidad: 2, fecha: '2026-12-01', hora_inicio: '08:00', frecuencia_horas: 6 }))
+            .rejects.toMatchObject({ estado_http: 404 });
+        responder([{ id: 30 }], []);
+        await expect(repo.crearIndicacion({ id_medico: 9, id_paciente: 30, id_insumo: 4, cantidad: 2, fecha: '2026-12-01', hora_inicio: '08:00', frecuencia_horas: 6 }))
+            .rejects.toMatchObject({ estado_http: 404 });
+    });
+
+    it('consulta historial con paciente, insumo, enfermero y fecha de administración', async () => {
+        const fila = { id: 2, nombre: 'Ana', apellido: 'Prueba', medicamento: 'Insumo', cantidad: 1, fecha_hora: horario, enfermero: 'Eva Enfermera' };
+        responder([fila]);
+        await expect(new AdministracionMedicacionRepositoryMysq().obtenerHistorial()).resolves.toEqual([fila]);
+        expect(mocks.execute.mock.calls[0]?.[0]).toContain('LEFT JOIN usuarios u ON u.id = am.id_enfermero');
+    });
+
     it('registra el consumo pendiente sin descontar stock; Recursos-Camas procesa el descuento', async () => {
         responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, { affectedRows: 1 });
         const id = await new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1);

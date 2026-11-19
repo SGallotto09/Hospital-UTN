@@ -2,11 +2,17 @@ import { AdministracionMedicacionRepositoryMysq } from '../../repositories/admin
 import { ObtenerMedicaciones } from '../../../use-cases/administracion-medicacion/obtener_medicaciones.js';
 import { AdministracionMedicacionController } from './administracion_medicacion_controller.js';
 import { AdministrarMedicacion } from '../../../use-cases/administracion-medicacion/administrar_medicacion.js';
+import { GestionarIndicaciones } from '../../../use-cases/administracion-medicacion/gestionar_indicaciones.js';
 
 const administracionMedicacionRepository = new AdministracionMedicacionRepositoryMysq();
 
 const obtenerMedicaciones = new ObtenerMedicaciones(administracionMedicacionRepository);
 
 const administracionMedicacion = new AdministrarMedicacion(administracionMedicacionRepository);
+const gestionarIndicaciones = new GestionarIndicaciones(administracionMedicacionRepository);
 
-export const administracionMedicacionController = new AdministracionMedicacionController(obtenerMedicaciones, administracionMedicacion);
+export const administracionMedicacionController = new AdministracionMedicacionController(
+    obtenerMedicaciones,
+    administracionMedicacion,
+    gestionarIndicaciones
+);

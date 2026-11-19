@@ -43,6 +43,113 @@ async obtenerTodas(): Promise<IndicacionMedicacion[]> {
         return filas as IndicacionMedicacion[];
     }
 
+    async obtenerOpcionesIndicacion(): Promise<{
+        pacientes: { id: number; nombre: string; apellido: string }[];
+        insumos: { id: number; nombre: string }[];
+    }> {
+        const [filasPacientes] = await this.db.query(`
+            SELECT p.id, p.nombre, p.apellido
+            FROM pacientes p
+            INNER JOIN asignaciones_camas ac ON ac.id_paciente = p.id
+            WHERE ac.fecha_egreso IS NULL
+            GROUP BY p.id, p.nombre, p.apellido
+            HAVING COUNT(DISTINCT ac.id) = 1
+            ORDER BY p.apellido, p.nombre
+        `);
+        const [filasInsumos] = await this.db.query(`
+            SELECT id, nombre
+            FROM insumos
+            ORDER BY nombre
+        `);
+        return {
+            pacientes: filasPacientes as { id: number; nombre: string; apellido: string }[],
+            insumos: filasInsumos as { id: number; nombre: string }[],
+        };
+    }
+
+    async crearIndicacion(datos: {
+        id_medico: number;
+        id_paciente: number;
+        id_insumo: number;
+        cantidad: number;
+        fecha: string;
+        hora_inicio: string;
+        frecuencia_horas: number;
+    }): Promise<number> {
+        const [filasPaciente] = await this.db.query(`
+            SELECT ac.id
+            FROM asignaciones_camas ac
+            WHERE ac.id_paciente = ? AND ac.fecha_egreso IS NULL
+            LIMIT 2
+        `, [datos.id_paciente]);
+        const asignaciones = filasPaciente as { id: number }[];
+        if (asignaciones.length === 0) {
+            throw new ErrorEnfermeria('El paciente no tiene una internación activa.', 404);
+        }
+        if (asignaciones.length !== 1) {
+            throw new ErrorEnfermeria('El paciente debe tener una única internación activa.', 409);
+        }
+
+        const [filasInsumo] = await this.db.query(
+            'SELECT id FROM insumos WHERE id = ? LIMIT 1',
+            [datos.id_insumo]
+        );
+        if ((filasInsumo as { id: number }[]).length === 0) {
+            throw new ErrorEnfermeria('No se encontró el insumo seleccionado.', 404);
+        }
+
+        const [resultado] = await this.db.query(`
+            INSERT INTO indicacion_medica
+                (id_medico, id_paciente, id_insumo, cantidad, fecha, hora_incio, frecuencia_hora)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+            datos.id_medico,
+            datos.id_paciente,
+            datos.id_insumo,
+            datos.cantidad,
+            datos.fecha,
+            datos.hora_inicio,
+            datos.frecuencia_horas,
+        ]);
+        const id = (resultado as ResultSetHeader).insertId;
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            throw new Error('MySQL no devolvió un ID válido para la indicación.');
+        }
+        return id;
+    }
+
+    async obtenerHistorial(): Promise<{
+        id: number;
+        nombre: string;
+        apellido: string;
+        medicamento: string;
+        cantidad: number;
+        fecha_hora: Date;
+        enfermero: string;
+    }[]> {
+        const [filas] = await this.db.query(`
+            SELECT am.id, p.nombre, p.apellido, i.nombre AS medicamento,
+                   im.cantidad, am.fecha_hora,
+                   COALESCE(CONCAT(u.nombre, ' ', u.apellido), 'Usuario no disponible') AS enfermero
+            FROM administracion_medicacion am
+            INNER JOIN indicacion_medica im ON im.id = am.id_indicacion_medica
+            INNER JOIN pacientes p ON p.id = im.id_paciente
+            INNER JOIN insumos i ON i.id = im.id_insumo
+            LEFT JOIN usuarios u ON u.id = am.id_enfermero
+            WHERE am.estado = 'Administrada'
+            ORDER BY am.fecha_hora DESC
+        `);
+        return filas as {
+            id: number;
+            nombre: string;
+            apellido: string;
+            medicamento: string;
+            cantidad: number;
+            fecha_hora: Date;
+            enfermero: string;
+        }[];
+    }
+
     private async detectarAdministracionesSinConsumo(): Promise<void> {
         try {
             const [filas] = await this.db.query(`
