@@ -1,9 +1,16 @@
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
 
 const router = useRouter();
+const ruta = useRoute();
+const avisoSesion = computed(() => {
+    if (ruta.query.motivo === 'conexion') return 'No se pudo verificar la sesión. Comprobá la conexión con el servidor e intentá nuevamente.';
+    if (ruta.query.motivo === 'permiso') return 'Tu rol no tiene permiso para acceder a esa pantalla.';
+    if (ruta.query.motivo === 'sesion') return 'La sesión no está vigente. Iniciá sesión para continuar.';
+    return '';
+});
 const usuario = ref("");
 const password = ref("");
 const mostrarPassword = ref(false);
@@ -18,7 +25,7 @@ async function iniciarSesion() {
     try {
         const respuesta = await fetch("/api/auth/login", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 usuario: usuario.value,
@@ -35,7 +42,7 @@ async function iniciarSesion() {
 
         password.value = "";
         // Destino provisional hasta que el grupo defina la pantalla inicial.
-        await router.replace("/enfermeria");
+        await router.replace("/recursos-camas");
     } catch {
         mensaje.value = "No se pudo conectar con el sistema. Intentá nuevamente.";
     } finally {
@@ -43,10 +50,6 @@ async function iniciarSesion() {
     }
 }
 
-function recuperarAcceso() {
-mensaje.value =
-    "La recuperación de contraseña estará disponible cuando conectemos el backend.";
-}
 </script>
 
 <template>
@@ -310,23 +313,8 @@ mensaje.value =
             </div>
             </div>
 
-            <div class="form-options">
-            <label class="remember-option">
-                <input type="checkbox" disabled title="Opción no disponible" />
-                <span>Recordarme</span>
-            </label>
-
-            <button
-                class="text-button"
-                type="button"
-                @click="recuperarAcceso"
-            >
-                ¿Olvidaste tu contraseña?
-            </button>
-            </div>
-
-            <p v-if="mensaje" class="feedback-message" role="status">
-            {{ mensaje }}
+            <p v-if="mensaje || avisoSesion" class="feedback-message" role="status">
+            {{ mensaje || avisoSesion }}
             </p>
 
             <button class="submit-button" type="submit" :disabled="ingresando" :aria-busy="ingresando">
@@ -795,47 +783,6 @@ width: 19px;
 height: 19px;
 }
 
-.form-options {
-display: flex;
-flex-wrap: wrap;
-align-items: center;
-justify-content: space-between;
-gap: 12px;
-margin: 2px 0 24px;
-}
-
-.remember-option {
-display: inline-flex;
-align-items: center;
-gap: 8px;
-color: #65758c;
-font-size: 11px;
-cursor: pointer;
-}
-
-.remember-option input {
-width: 15px;
-height: 15px;
-margin: 0;
-accent-color: #087ee5;
-cursor: pointer;
-}
-
-.text-button {
-padding: 2px 0;
-border: 0;
-background: transparent;
-color: #0878d9;
-font-size: 11px;
-font-weight: 650;
-cursor: pointer;
-}
-
-.text-button:hover {
-color: #0757a1;
-text-decoration: underline;
-}
-
 .feedback-message {
 margin: -7px 0 17px;
 padding: 11px 12px;
@@ -1074,13 +1021,6 @@ text-align: center;
     font-size: 27px;
 }
 
-.form-options {
-    align-items: flex-start;
-}
-
-.text-button {
-    text-align: right;
-}
 }
 
 @media (min-width: 761px) and (max-height: 800px) {

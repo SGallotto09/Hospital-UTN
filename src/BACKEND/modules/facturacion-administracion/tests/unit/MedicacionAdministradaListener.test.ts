@@ -36,7 +36,7 @@ describe('MedicacionAdministradaListener', () => {
     } finally {
       for (const listener of event_bus.listeners('MedicacionAdministrada')) {
         if (!listenersAnteriores.includes(listener)) {
-          
+
 event_bus.off(
   'MedicacionAdministrada',
   listener as (...args: unknown[]) => void

@@ -16,8 +16,8 @@
     Medicación
 </RouterLink>
 
-<RouterLink to="/enfermeria/alertas">
-    Alertas
+<RouterLink to="/enfermeria/protocolos">
+    Protocolos
 </RouterLink>
 </nav>
 </template>

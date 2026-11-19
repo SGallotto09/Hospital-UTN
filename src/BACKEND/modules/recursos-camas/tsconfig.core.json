@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.module.json",
+  "include": [
+    "./domain/**/*.ts",
+    "./application/**/*.ts",
+    "./presentation/validators/**/*.ts",
+    "../../../FRONTEND/modules/recursos-camas/**/*.ts",
+    "../../../FRONTEND/modules/recursos-camas/**/*.vue"
+  ]
+}

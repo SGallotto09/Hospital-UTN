@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { invalidarAcceso } from "../../router/autenticacion";
 
 const router = useRouter();
 const cerrandoSesion = ref(false);
@@ -14,7 +15,7 @@ async function cerrarSesion() {
     try {
         const respuesta = await fetch("/api/auth/logout", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
         });
 
         if (respuesta.status !== 200) {
@@ -22,6 +23,7 @@ async function cerrarSesion() {
             return;
         }
 
+        invalidarAcceso();
         await router.replace("/login");
     } catch {
         errorSalida.value = "No se pudo conectar para cerrar sesión. Intentá nuevamente.";
@@ -52,19 +54,8 @@ async function cerrarSesion() {
     <!-- NAVEGACIÓN -->
     <nav class="main-nav">
 
-    <!-- INICIO -->
-    <RouterLink to="/" class="nav-link">
-        <span class="nav-icon">⌂</span>
-        <span>Inicio</span>
-    </RouterLink>
-
     <!-- MÓDULOS -->
-    <RouterLink to="/pacientes" class="nav-link module-link">
-        <span class="nav-icon">♙</span>
-        <span>Pacientes</span>
-    </RouterLink>
-
-    <RouterLink to="/admisiones" class="nav-link">
+    <RouterLink to="/admisiones" class="nav-link module-link">
         <span class="nav-icon">▣</span>
         <span>Admisión y turnos</span>
     </RouterLink>
@@ -79,14 +70,19 @@ async function cerrarSesion() {
         <span>Atención y enfermería</span>
     </RouterLink>
 
+    <RouterLink to="/recursos-camas" class="nav-link">
+        <span class="nav-icon" aria-hidden="true">▤</span>
+        <span>Recursos y camas</span>
+    </RouterLink>
+
     <RouterLink to="/facturacion" class="nav-link">
         <span class="nav-icon">$</span>
         <span>Facturación</span>
     </RouterLink>
 
-    <RouterLink to="/configuracion" class="nav-link">
-        <span class="nav-icon">⚙</span>
-        <span>Configuración</span>
+    <RouterLink to="/usuarios/registro" class="nav-link">
+        <span class="nav-icon">&#9817;</span>
+        <span>Administrar usuarios</span>
     </RouterLink>
 
     </nav>

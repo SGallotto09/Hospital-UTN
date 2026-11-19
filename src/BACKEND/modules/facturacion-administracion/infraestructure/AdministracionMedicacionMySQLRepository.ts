@@ -20,12 +20,14 @@ export class AdministracionMedicacionMySQLRepository
     const [resultado] = await db.query(
       `SELECT
         im.id_paciente AS idPaciente,
-        im.id_insumo AS idInsumo,
-        im.cantidad AS cantidadTotalTratamiento,
+        COALESCE(consumo.id_insumo, im.id_insumo) AS idInsumo,
+        COALESCE(consumo.cantidad, im.cantidad) AS cantidadTotalTratamiento,
         am.estado AS estado
       FROM administracion_medicacion am
       INNER JOIN indicacion_medica im
         ON am.id_indicacion_medica = im.id
+      LEFT JOIN consumos_medicacion consumo
+        ON consumo.id_administracion = am.id
       WHERE am.id = ?`,
       [idAdministracionMedicacion]
     );

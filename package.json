@@ -1,3 +1,4 @@
+
 {
   "name": "hospital-utn",
   "version": "0.0.0",
@@ -14,7 +15,9 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
-    "backend": "tsx watch src/BACKEND/server.ts"
+    "backend": "tsx watch src/BACKEND/server.ts",
+    "backend:dev": "tsx watch src/BACKEND/server.ts",
+    "backend:build": "tsc -p tsconfig.server.json"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
