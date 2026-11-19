@@ -1,9 +1,16 @@
 
 <script setup lang="ts">
-import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed } from "vue";
+import { useRouter, useRoute } from "vue-router";
 
 const router = useRouter();
+const ruta = useRoute();
+const avisoSesion = computed(() => {
+    if (ruta.query.motivo === 'conexion') return 'No se pudo verificar la sesión. Comprobá la conexión con el servidor e intentá nuevamente.';
+    if (ruta.query.motivo === 'permiso') return 'Tu rol no tiene permiso para acceder a esa pantalla.';
+    if (ruta.query.motivo === 'sesion') return 'La sesión no está vigente. Iniciá sesión para continuar.';
+    return '';
+});
 const usuario = ref("");
 const password = ref("");
 const mostrarPassword = ref(false);
@@ -18,7 +25,7 @@ async function iniciarSesion() {
     try {
         const respuesta = await fetch("/api/auth/login", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 usuario: usuario.value,
@@ -306,8 +313,8 @@ async function iniciarSesion() {
             </div>
             </div>
 
-            <p v-if="mensaje" class="feedback-message" role="status">
-            {{ mensaje }}
+            <p v-if="mensaje || avisoSesion" class="feedback-message" role="status">
+            {{ mensaje || avisoSesion }}
             </p>
 
             <button class="submit-button" type="submit" :disabled="ingresando" :aria-busy="ingresando">

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRouter } from "vue-router";
+import { invalidarAcceso } from "../../router/autenticacion";
+import { rolActual } from "../../router/autenticacion";
 
 const router = useRouter();
 const cerrandoSesion = ref(false);
@@ -14,7 +16,7 @@ async function cerrarSesion() {
     try {
         const respuesta = await fetch("/api/auth/logout", {
             method: "POST",
-            credentials: "same-origin",
+            credentials: "include",
         });
 
         if (respuesta.status !== 200) {
@@ -22,6 +24,7 @@ async function cerrarSesion() {
             return;
         }
 
+        invalidarAcceso();
         await router.replace("/login");
     } catch {
         errorSalida.value = "No se pudo conectar para cerrar sesión. Intentá nuevamente.";
@@ -52,36 +55,83 @@ async function cerrarSesion() {
     <!-- NAVEGACIÓN -->
     <nav class="main-nav">
 
-    <!-- MÓDULOS -->
-    <RouterLink to="/admisiones" class="nav-link module-link">
-        <span class="nav-icon">▣</span>
-        <span>Admisión y turnos</span>
-    </RouterLink>
+        <!-- ADMISIÓN Y TURNOS -->
+        <RouterLink
+            v-if="
+                ['Administrador', 'Recepcionista', 'Médico', 'Enfermero']
+                    .includes(rolActual ?? '')
+            "
+            :to="
+                rolActual === 'Enfermero'
+                    ? '/admisiones/triaje'
+                    : rolActual === 'Médico'
+                        ? '/admisiones/agenda'
+                        : '/admisiones/dashboard'
+            "
+            class="nav-link module-link"
+        >
+            <span class="nav-icon">▣</span>
+            <span>Admisión y turnos</span>
+        </RouterLink>
 
-    <RouterLink to="/historia-clinica" class="nav-link">
-        <span class="nav-icon">▤</span>
-        <span>Historia clínica</span>
-    </RouterLink>
+        <!-- HISTORIA CLÍNICA -->
+        <RouterLink
+            v-if="
+                ['Administrador', 'Médico', 'Enfermero']
+                    .includes(rolActual ?? '')
+            "
+            to="/historia-clinica"
+            class="nav-link"
+        >
+            <span class="nav-icon">▤</span>
+            <span>Historia clínica</span>
+        </RouterLink>
 
-    <RouterLink to="/enfermeria" class="nav-link">
-        <span class="nav-icon">♥</span>
-        <span>Atención y enfermería</span>
-    </RouterLink>
+        <!-- ENFERMERÍA -->
+        <RouterLink
+            v-if="
+                ['Administrador', 'Médico', 'Enfermero']
+                    .includes(rolActual ?? '')
+            "
+            :to="
+                rolActual === 'Médico'
+                    ? '/enfermeria/pacientes'
+                    : '/enfermeria'
+            "
+            class="nav-link"
+        >
+            <span class="nav-icon">♥</span>
+            <span>Atención y enfermería</span>
+        </RouterLink>
 
-    <RouterLink to="/recursos-camas" class="nav-link">
-        <span class="nav-icon" aria-hidden="true">▤</span>
-        <span>Recursos y camas</span>
-    </RouterLink>
+        <!-- RECURSOS Y CAMAS -->
+        <RouterLink
+            to="/recursos-camas"
+            class="nav-link"
+        >
+            <span class="nav-icon">▤</span>
+            <span>Recursos y camas</span>
+        </RouterLink>
 
-    <RouterLink to="/facturacion" class="nav-link">
-        <span class="nav-icon">$</span>
-        <span>Facturación</span>
-    </RouterLink>
+        <!-- FACTURACIÓN -->
+        <RouterLink
+            v-if="rolActual === 'Administrador'"
+            to="/facturacion"
+            class="nav-link"
+        >
+            <span class="nav-icon">$</span>
+            <span>Facturación</span>
+        </RouterLink>
 
-    <RouterLink to="/usuarios/registro" class="nav-link">
-        <span class="nav-icon">&#9817;</span>
-        <span>Administrar usuarios</span>
-    </RouterLink>
+        <!-- IAM -->
+        <RouterLink
+            v-if="rolActual === 'Administrador'"
+            to="/usuarios/registro"
+            class="nav-link"
+        >
+            <span class="nav-icon">♟</span>
+            <span>Administrar usuarios</span>
+        </RouterLink>
 
     </nav>
 

@@ -5,12 +5,14 @@ import AsignarCamaForm from '../components/AsignarCamaForm.vue'
 import TransicionCamaForm from '../components/TransicionCamaForm.vue'
 import RecursosCamasNav from '../components/RecursosCamasNav.vue'
 import { crearCamasApi, ErrorCamasApi } from '../services/recursosCamasApi'
+import { permisosCamas } from '../services/permisosCamas'
 import type {
   Cama,
   CamasApi,
   EstadoCama,
   AccionCama,
   SolicitudTransicion,
+  TipoCama,
 } from '../services/recursosCamasApi'
 
 const props = defineProps<{ api?: CamasApi }>()
@@ -21,6 +23,10 @@ const enviando = ref(false)
 const mapaVigente = ref(false)
 const error = ref('')
 const aviso = ref('')
+const mostrarAlta = ref(false)
+const cargandoTipos = ref(false)
+const tipos = ref<TipoCama[]>([])
+const nuevaCama = ref({ habitacion: '', piso: '', idTipoCama: '' })
 const seleccion = ref<{ cama: Cama; accion: 'asignar' | AccionCama } | null>(null)
 const estado = ref<EstadoCama | ''>('')
 const piso = ref('')
@@ -50,13 +56,50 @@ async function cargar(): Promise<boolean> {
 }
 
 async function actualizar() {
+  mostrarAlta.value = false
   error.value = ''
   seleccion.value = null
   await cargar()
 }
 
 function seleccionar(cama: Cama, accion: 'asignar' | AccionCama) {
+  mostrarAlta.value = false
   seleccion.value = { cama, accion }
+}
+
+async function abrirAlta() {
+  if (cargandoTipos.value || enviando.value) return
+  seleccion.value = null
+  error.value = ''
+  aviso.value = ''
+  cargandoTipos.value = true
+  try {
+    tipos.value = await api.listarTipos()
+    if (!tipos.value.length) throw new Error('No hay tipos de cama disponibles.')
+    nuevaCama.value = { habitacion: '', piso: '', idTipoCama: '' }
+    mostrarAlta.value = true
+  } catch (causa) {
+    error.value = causa instanceof Error ? causa.message : 'No se pudieron cargar los tipos de cama.'
+  } finally { cargandoTipos.value = false }
+}
+
+async function registrar() {
+  const { habitacion, piso: pisoNuevo, idTipoCama } = nuevaCama.value
+  const datos = { habitacion: Number(habitacion), piso: Number(pisoNuevo), idTipoCama: Number(idTipoCama) }
+  if (!String(habitacion).trim() || !String(pisoNuevo).trim() || !idTipoCama ||
+      !Number.isInteger(datos.habitacion) || datos.habitacion <= 0 || datos.habitacion > 2147483647 ||
+      !Number.isInteger(datos.piso) || datos.piso < -2147483648 || datos.piso > 2147483647 ||
+      !tipos.value.some(tipo => tipo.id === datos.idTipoCama)) {
+    error.value = 'Completá habitación, piso y tipo con valores válidos.'
+    return
+  }
+  await ejecutarOperacion(async () => {
+    const resultado = await api.crear(datos)
+    mostrarAlta.value = false
+    estado.value = ''
+    piso.value = ''
+    return `Cama ${resultado.id} registrada correctamente en estado Libre.`
+  })
 }
 
 async function ejecutarOperacion(operacion: () => Promise<string>) {
@@ -113,13 +156,43 @@ onMounted(cargar)
         <h1>Mapa de camas</h1>
         <p>Disponibilidad, asignación y preparación de las camas del hospital.</p>
       </div>
-      <button class="primary-button" :disabled="cargando || enviando" @click="actualizar">
+      <div class="header-actions">
+      <button v-if="permisosCamas.crear" class="primary-button" :disabled="cargando || enviando || cargandoTipos || !mapaVigente" @click="abrirAlta">
+        + Nueva cama
+      </button>
+      <button class="primary-button" :disabled="cargando || enviando || cargandoTipos" @click="actualizar">
         Actualizar mapa
       </button>
+      </div>
     </header>
     <div class="content">
       <p v-if="error" role="alert" class="message error">{{ error }}</p>
       <p v-if="aviso" role="status" class="message exito">{{ aviso }}</p>
+      <p v-if="cargandoTipos" role="status">Cargando tipos de cama…</p>
+      <form v-if="mostrarAlta && permisosCamas.crear" class="alta-cama" aria-label="Nueva cama" @submit.prevent="registrar">
+        <h2>Nueva cama</h2>
+        <p>Se registrará Libre, sin paciente asignado.</p>
+        <fieldset :disabled="enviando || !mapaVigente">
+          <div class="campos-alta">
+            <label>Habitación
+              <input v-model="nuevaCama.habitacion" name="habitacion" type="number" min="1" max="2147483647" step="1" required />
+            </label>
+            <label>Piso
+              <input v-model="nuevaCama.piso" name="piso" type="number" min="-2147483648" max="2147483647" step="1" required />
+            </label>
+            <label>Tipo de cama
+              <select v-model="nuevaCama.idTipoCama" name="idTipoCama" required>
+                <option value="">Seleccionar</option>
+                <option v-for="tipo in tipos" :key="tipo.id" :value="String(tipo.id)">{{ tipo.nombre }}</option>
+              </select>
+            </label>
+          </div>
+          <div class="header-actions">
+            <button class="primary-button" type="submit">{{ enviando ? 'Guardando…' : 'Guardar cama' }}</button>
+            <button type="button" @click="mostrarAlta = false">Cancelar</button>
+          </div>
+        </fieldset>
+      </form>
       <div class="filtros toolbar">
         <label class="filter"
           >Estado
@@ -140,7 +213,7 @@ onMounted(cargar)
       </div>
       <p v-if="cargando" role="status" class="loading">Cargando camas…</p>
       <AsignarCamaForm
-        v-if="seleccion && seleccion.accion === 'asignar'"
+        v-if="seleccion && seleccion.accion === 'asignar' && permisosCamas.asignar"
         :key="seleccion.cama.id"
         :cama="seleccion.cama"
         :enviando="enviando"
@@ -149,7 +222,7 @@ onMounted(cargar)
         @cancelar="seleccion = null"
       />
       <TransicionCamaForm
-        v-if="seleccion && seleccion.accion !== 'asignar'"
+        v-if="seleccion && seleccion.accion !== 'asignar' && (seleccion.accion === 'liberar' ? permisosCamas.liberar : seleccion.accion === 'confirmar-limpieza' ? permisosCamas.limpiar : permisosCamas.mantener)"
         :key="`${seleccion.cama.id}-${seleccion.accion}`"
         :cama="seleccion.cama"
         :accion="seleccion.accion"
@@ -162,7 +235,7 @@ onMounted(cargar)
           v-for="cama in filtradas"
           :key="cama.id"
           :cama="cama"
-          :deshabilitada="cargando || enviando || !mapaVigente"
+          :deshabilitada="cargando || enviando || cargandoTipos || !mapaVigente"
           @asignar="seleccionar($event, 'asignar')"
           @transicionar="seleccionar"
         />
@@ -175,6 +248,14 @@ onMounted(cargar)
 </template>
 
 <style scoped>
+.header-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.alta-cama { background: white; padding: 20px; margin-bottom: 22px; border: 1px solid #e5ebf1; border-radius: 10px; }
+.alta-cama h2 { margin: 0 0 8px; font-size: 18px; }
+.alta-cama p { color: #60758a; }
+.alta-cama fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.campos-alta { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 16px; margin: 18px 0; }
+.campos-alta label { display: flex; flex-direction: column; gap: 8px; }
+.campos-alta input { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid #dce5eb; border-radius: 7px; font: inherit; color: #20394b; }
 .recursos-camas {
   min-width: 0;
   min-height: 100vh;

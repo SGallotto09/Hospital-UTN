@@ -15,6 +15,7 @@ import dashboardRoutes from "./modules/atencion-enfermeria/infraestructure/api/d
 import protocoloAtencionRoutes from "./modules/atencion-enfermeria/infraestructure/api/protocolos/protocolo_atencion_routes.js";
 import { crearRegistroConsumosMysql } from "./modules/recursos-camas/infraestructure/database/RegistroConsumosMysql.js";
 import { iniciarProcesadorConsumos } from "./modules/recursos-camas/infraestructure/procesarConsumosPendientes.js";
+import historiaClinicaRoutes from "./modules/historia-clinica/infraestructure/api/historia_clinica_routes.js";
 
 // ==========================================
 // IAM
@@ -113,6 +114,18 @@ import { FacturarPrestacion } from "./modules/facturacion-administracion/use-cas
 import { RegistroPrestacionMySQLRepository } from "./modules/facturacion-administracion/infraestructure/RegistroPrestacionMySQLRepository.js";
 
 import { iniciarFacturacionMedicacion } from "./modules/facturacion-administracion/infraestructure/IniciarFacturacionMedicacion.js";
+
+import { MySQLListaEsperaRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLListaEsperaRepository.js";
+import { AgregarPacienteListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/AgregarPacienteListaEspera.js";
+import { ListaEsperaController } from "./modules/admicion-turnos/infraestructure/api/ListaEsperaController.js";
+import { ListaEsperaRoutes } from "./modules/admicion-turnos/infraestructure/api/ListaEsperaRoutes.js";
+import { ListarListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/ListarListaEspera.js";
+import { CancelarSolicitudListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/CancelarSolicitudListaEspera.js";
+
+import { MySQLMedicoRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLMedicoRepository.js";
+import { ListarMedicos } from "./modules/admicion-turnos/application/use-cases/medicos/ListarMedicos.js";
+import { MedicoController } from "./modules/admicion-turnos/infraestructure/api/MedicoController.js";
+import { MedicoRoutes } from "./modules/admicion-turnos/infraestructure/api/MedicoRoutes.js";
 
 // ==========================================
 // CONFIGURACIÓN GENERAL
@@ -214,6 +227,7 @@ const registroRoutes = new RegistroRoutes(registroController);
 app.use("/api/auth", authRoutes.obtenerRouter());
 
 app.use("/api/auth", registroRoutes.obtenerRouter());
+app.use("/api/historia-clinica", historiaClinicaRoutes);
 
 // ==========================================
 // FACTURACIÓN Y ADMINISTRACIÓN
@@ -293,6 +307,29 @@ const pacienteRoutes = new PacienteRoutes(
 app.use(
     "/api/admisiones/pacientes",
     pacienteRoutes.obtenerRouter()
+);
+
+// ==========================================
+// MÓDULO DE MÉDICOS
+// ==========================================
+
+const medicoRepository = new MySQLMedicoRepository();
+
+const listarMedicos = new ListarMedicos(
+    medicoRepository
+);
+
+const medicoController = new MedicoController(
+    listarMedicos
+);
+
+const medicoRoutes = new MedicoRoutes(
+    medicoController
+);
+
+app.use(
+    "/api/admisiones/medicos",
+    medicoRoutes.obtenerRouter()
 );
 
 // ==========================================
@@ -390,6 +427,40 @@ const triajeRoutes = new TriajeRoutes(
 app.use(
     "/api/admisiones/triaje",
     triajeRoutes.obtenerRouter()
+);
+
+// ==========================================
+// MÓDULO DE LISTA DE ESPERA
+// ==========================================
+
+const listaEsperaRepository = new MySQLListaEsperaRepository();
+
+const agregarPacienteListaEspera = new AgregarPacienteListaEspera(
+    listaEsperaRepository,
+    pacienteRepository
+);
+
+const listarListaEspera = new ListarListaEspera(
+    listaEsperaRepository
+);
+
+const cancelarSolicitudListaEspera = new CancelarSolicitudListaEspera(
+    listaEsperaRepository
+);
+
+const listaEsperaController = new ListaEsperaController(
+    agregarPacienteListaEspera,
+    listarListaEspera,
+    cancelarSolicitudListaEspera
+);
+
+const listaEsperaRoutes = new ListaEsperaRoutes(
+    listaEsperaController
+);
+
+app.use(
+    "/api/admisiones/lista-espera",
+    listaEsperaRoutes.obtenerRouter()
 );
 
 // ==========================================

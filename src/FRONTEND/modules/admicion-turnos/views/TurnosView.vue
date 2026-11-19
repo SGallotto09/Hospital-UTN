@@ -1,6 +1,5 @@
-
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
 type EstadoTurno =
     | "Programado"
@@ -19,7 +18,7 @@ interface Paciente {
 interface Medico {
     id: number;
     nombre: string;
-    especialidad: string;
+    apellido: string;
 }
 
 interface Turno {
@@ -31,6 +30,33 @@ interface Turno {
     horaFin: string;
     estado: EstadoTurno;
     costo: number;
+}
+
+interface TurnoApi {
+    id: number;
+    idPaciente: number;
+    idMedico: number;
+    idRecepcionista: number;
+    fechaHoraInicio: string;
+    fechaHoraFin: string;
+    estado: EstadoTurno;
+    costo: number;
+}
+
+interface RespuestaPacientes {
+    pacientes: Paciente[];
+}
+
+interface RespuestaMedicos {
+    medicos: Medico[];
+}
+
+interface RespuestaTurnos {
+    turnos: TurnoApi[];
+}
+
+interface RespuestaMensaje {
+    mensaje?: string;
 }
 
 function obtenerFechaLocal(fecha: Date): string {
@@ -56,99 +82,194 @@ function convertirMinutosAHora(minutos: number): string {
     return `${String(horas).padStart(2, "0")}:${String(resto).padStart(2, "0")}`;
 }
 
+function convertirTurnoApi(turno: TurnoApi): Turno {
+    const inicio = new Date(turno.fechaHoraInicio);
+    const fin = new Date(turno.fechaHoraFin);
+
+    return {
+        id: turno.id,
+        idPaciente: turno.idPaciente,
+        idMedico: turno.idMedico,
+        fecha: obtenerFechaLocal(inicio),
+        horaInicio: `${String(inicio.getHours()).padStart(2, "0")}:${String(inicio.getMinutes()).padStart(2, "0")}`,
+        horaFin: `${String(fin.getHours()).padStart(2, "0")}:${String(fin.getMinutes()).padStart(2, "0")}`,
+        estado: turno.estado,
+        costo: Number(turno.costo)
+    };
+}
+
 const fechaHoy = obtenerFechaLocal(new Date());
 
-const pacientes = ref<Paciente[]>([
-    { id: 1, nombre: "Carlos", apellido: "López", dni: "35678901" },
-    { id: 2, nombre: "Lucía", apellido: "Fernández", dni: "42156890" },
-    { id: 3, nombre: "Mariana", apellido: "Gómez", dni: "39876543" },
-    { id: 4, nombre: "Martín", apellido: "Rodríguez", dni: "33214567" }
-]);
-
-const medicos = ref<Medico[]>([
-    { id: 1, nombre: "Dr. Silva", especialidad: "Cardiología" },
-    { id: 2, nombre: "Dra. Torres", especialidad: "Pediatría" },
-    { id: 3, nombre: "Dr. Pérez", especialidad: "Clínica médica" }
-]);
-
-const turnos = ref<Turno[]>([
-    {
-        id: 1,
-        idPaciente: 1,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "08:00",
-        horaFin: "08:30",
-        estado: "Confirmado",
-        costo: 15000
-    },
-    {
-        id: 2,
-        idPaciente: 2,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "09:00",
-        horaFin: "09:30",
-        estado: "Programado",
-        costo: 15000
-    },
-    {
-        id: 3,
-        idPaciente: 3,
-        idMedico: 2,
-        fecha: fechaHoy,
-        horaInicio: "10:00",
-        horaFin: "10:30",
-        estado: "En Sala de Espera",
-        costo: 18000
-    },
-    {
-        id: 4,
-        idPaciente: 4,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "11:00",
-        horaFin: "11:30",
-        estado: "Cancelado",
-        costo: 15000
-    },
-    {
-        id: 5,
-        idPaciente: 1,
-        idMedico: 3,
-        fecha: fechaHoy,
-        horaInicio: "12:00",
-        horaFin: "12:30",
-        estado: "Atendido",
-        costo: 12000
-    }
-]);
+const pacientes = ref<Paciente[]>([]);
+const medicos = ref<Medico[]>([]);
+const turnos = ref<Turno[]>([]);
 
 const fechaSeleccionada = ref(fechaHoy);
 const busqueda = ref("");
 const filtroEstado = ref<EstadoTurno | "Todos">("Todos");
+
 const mostrarFormulario = ref(false);
+const cargando = ref(false);
+const cargandoTurnos = ref(false);
+const registrando = ref(false);
+
 const mensaje = ref("");
 const error = ref("");
+const errorCarga = ref("");
 
 const nuevoTurno = reactive({
-    idPaciente: 1,
-    idMedico: 1,
+    idPaciente: 0,
+    idMedico: 0,
     fecha: fechaHoy,
     horaInicio: "",
     costo: 15000
 });
 
+// =====================================================
+// CARGAR PACIENTES, MÉDICOS Y TURNOS
+// =====================================================
+
+async function cargarDatos() {
+    cargando.value = true;
+    errorCarga.value = "";
+
+    try {
+        const [respuestaPacientes, respuestaMedicos] = await Promise.all([
+            fetch("/api/admisiones/pacientes", {
+                method: "GET",
+                credentials: "same-origin"
+            }),
+            fetch("/api/admisiones/medicos", {
+                method: "GET",
+                credentials: "same-origin"
+            })
+        ]);
+
+        if (
+            respuestaPacientes.status === 401 ||
+            respuestaMedicos.status === 401
+        ) {
+            throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+        }
+
+        if (!respuestaPacientes.ok || !respuestaMedicos.ok) {
+            throw new Error(
+                "No se pudieron cargar los pacientes o los médicos."
+            );
+        }
+
+        const datosPacientes =
+            await respuestaPacientes.json() as RespuestaPacientes;
+        const datosMedicos =
+            await respuestaMedicos.json() as RespuestaMedicos;
+
+        if (
+            !Array.isArray(datosPacientes.pacientes) ||
+            !Array.isArray(datosMedicos.medicos)
+        ) {
+            throw new Error("El servidor devolvió información inválida.");
+        }
+
+        pacientes.value = datosPacientes.pacientes;
+        medicos.value = datosMedicos.medicos;
+
+        await cargarTurnosFecha(fechaSeleccionada.value);
+    } catch (err) {
+        errorCarga.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al cargar los datos.";
+    } finally {
+        cargando.value = false;
+    }
+}
+
+// =====================================================
+// CARGAR AGENDA DE TODOS LOS MÉDICOS PARA UNA FECHA
+// =====================================================
+
+async function cargarTurnosFecha(fecha: string) {
+    if (!fecha) return;
+
+    cargandoTurnos.value = true;
+    errorCarga.value = "";
+
+    try {
+        const respuestas = await Promise.all(
+            medicos.value.map(async (medico) => {
+                const parametros = new URLSearchParams({
+                    idMedico: String(medico.id),
+                    fecha
+                });
+
+                const respuesta = await fetch(
+                    `/api/admisiones/turnos/agenda?${parametros.toString()}`,
+                    {
+                        method: "GET",
+                        credentials: "same-origin"
+                    }
+                );
+
+                if (respuesta.status === 401) {
+                    throw new Error(
+                        "Tu sesión expiró. Volvé a iniciar sesión."
+                    );
+                }
+
+                if (!respuesta.ok) {
+                    throw new Error(
+                        `No se pudo cargar la agenda de ${medico.nombre} ${medico.apellido}.`
+                    );
+                }
+
+                const datos =
+                    await respuesta.json() as RespuestaTurnos;
+
+                if (!Array.isArray(datos.turnos)) {
+                    throw new Error(
+                        "El servidor devolvió una agenda inválida."
+                    );
+                }
+
+                return datos.turnos.map(convertirTurnoApi);
+            })
+        );
+
+        const turnosFecha = respuestas.flat();
+
+        // Reemplazamos únicamente los turnos de la fecha consultada.
+        turnos.value = [
+            ...turnos.value.filter((turno) => turno.fecha !== fecha),
+            ...turnosFecha
+        ];
+    } catch (err) {
+        errorCarga.value = err instanceof Error
+            ? err.message
+            : "No se pudo cargar la agenda médica.";
+    } finally {
+        cargandoTurnos.value = false;
+    }
+}
+
+// =====================================================
+// DATOS CALCULADOS
+// =====================================================
+
 const turnosDelDia = computed(() =>
-    turnos.value.filter((turno) => turno.fecha === fechaSeleccionada.value)
+    turnos.value.filter(
+        (turno) => turno.fecha === fechaSeleccionada.value
+    )
 );
 
 const turnosActivos = computed(() =>
-    turnosDelDia.value.filter((turno) => turno.estado !== "Cancelado")
+    turnosDelDia.value.filter(
+        (turno) => turno.estado !== "Cancelado"
+    )
 );
 
 const turnosPendientes = computed(() =>
-    turnosActivos.value.filter((turno) => turno.estado === "Programado").length
+    turnosActivos.value.filter(
+        (turno) => turno.estado === "Programado"
+    ).length
 );
 
 const turnosConfirmados = computed(() =>
@@ -160,8 +281,14 @@ const turnosConfirmados = computed(() =>
 );
 
 const turnosCancelados = computed(() =>
-    turnosDelDia.value.filter((turno) => turno.estado === "Cancelado").length
+    turnosDelDia.value.filter(
+        (turno) => turno.estado === "Cancelado"
+    ).length
 );
+
+// =====================================================
+// FILTRAR TURNOS
+// =====================================================
 
 const turnosFiltrados = computed(() => {
     const texto = busqueda.value.toLowerCase().trim();
@@ -170,18 +297,19 @@ const turnosFiltrados = computed(() => {
         const paciente = pacientes.value.find(
             (item) => item.id === turno.idPaciente
         );
-
         const medico = medicos.value.find(
             (item) => item.id === turno.idMedico
         );
 
         const nombrePaciente =
             `${paciente?.nombre ?? ""} ${paciente?.apellido ?? ""}`.toLowerCase();
+        const nombreMedico =
+            `${medico?.nombre ?? ""} ${medico?.apellido ?? ""}`.toLowerCase();
 
         const coincideBusqueda =
             nombrePaciente.includes(texto) ||
             (paciente?.dni ?? "").includes(texto) ||
-            (medico?.nombre ?? "").toLowerCase().includes(texto);
+            nombreMedico.includes(texto);
 
         const coincideEstado =
             filtroEstado.value === "Todos" ||
@@ -190,6 +318,10 @@ const turnosFiltrados = computed(() => {
         return coincideBusqueda && coincideEstado;
     }).sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
 });
+
+// =====================================================
+// HORARIOS DISPONIBLES
+// =====================================================
 
 const horariosDisponibles = computed(() => {
     const ocupados = turnos.value.filter(
@@ -202,8 +334,12 @@ const horariosDisponibles = computed(() => {
     const disponibles: string[] = [];
     const duracion = 30;
 
-    // Horario de atención de demostración: 08:00 a 17:00.
-    for (let minutos = 8 * 60; minutos + duracion <= 17 * 60; minutos += 30) {
+    // Horario de atención configurado actualmente: 08:00 a 17:00.
+    for (
+        let minutos = 8 * 60;
+        minutos + duracion <= 17 * 60;
+        minutos += 30
+    ) {
         const horaInicio = convertirMinutosAHora(minutos);
         const horaFin = convertirMinutosAHora(minutos + duracion);
 
@@ -225,8 +361,14 @@ const horariosDisponibles = computed(() => {
     return disponibles;
 });
 
+// =====================================================
+// OBTENER DATOS PARA MOSTRAR
+// =====================================================
+
 function obtenerPaciente(id: number): string {
-    const paciente = pacientes.value.find((item) => item.id === id);
+    const paciente = pacientes.value.find(
+        (item) => item.id === id
+    );
 
     return paciente
         ? `${paciente.apellido}, ${paciente.nombre}`
@@ -234,11 +376,19 @@ function obtenerPaciente(id: number): string {
 }
 
 function obtenerDniPaciente(id: number): string {
-    return pacientes.value.find((item) => item.id === id)?.dni ?? "—";
+    return pacientes.value.find(
+        (item) => item.id === id
+    )?.dni ?? "—";
 }
 
 function obtenerMedico(id: number): string {
-    return medicos.value.find((item) => item.id === id)?.nombre ?? "Médico no encontrado";
+    const medico = medicos.value.find(
+        (item) => item.id === id
+    );
+
+    return medico
+        ? `${medico.apellido}, ${medico.nombre}`
+        : "Médico no encontrado";
 }
 
 function formatearFecha(fecha: string): string {
@@ -270,32 +420,61 @@ function obtenerEstadoClase(estado: EstadoTurno): string {
     return clases[estado];
 }
 
-function actualizarHorarioDisponible() {
+// =====================================================
+// ACTUALIZAR HORARIOS AL CAMBIAR MÉDICO O FECHA
+// =====================================================
+
+async function actualizarHorarioDisponible() {
+    if (!nuevoTurno.fecha || !nuevoTurno.idMedico) {
+        nuevoTurno.horaInicio = "";
+        return;
+    }
+
+    await cargarTurnosFecha(nuevoTurno.fecha);
+
     if (!horariosDisponibles.value.includes(nuevoTurno.horaInicio)) {
         nuevoTurno.horaInicio = horariosDisponibles.value[0] ?? "";
     }
 }
 
+// =====================================================
+// ABRIR FORMULARIO
+// =====================================================
+
 function abrirFormulario() {
     error.value = "";
+    mensaje.value = "";
+    errorCarga.value = "";
+
+    if (pacientes.value.length === 0 || medicos.value.length === 0) {
+        errorCarga.value =
+            "Necesitás tener al menos un paciente y un médico registrados para reservar un turno.";
+        return;
+    }
+
     nuevoTurno.idPaciente = pacientes.value[0]?.id ?? 0;
     nuevoTurno.idMedico = medicos.value[0]?.id ?? 0;
     nuevoTurno.fecha = fechaSeleccionada.value;
     nuevoTurno.costo = 15000;
     nuevoTurno.horaInicio = "";
-    actualizarHorarioDisponible();
 
     mostrarFormulario.value = true;
+    void actualizarHorarioDisponible();
 }
 
-function registrarTurno() {
+// =====================================================
+// RESERVAR TURNO
+// =====================================================
+
+async function registrarTurno() {
+    if (registrando.value) return;
+
     error.value = "";
     mensaje.value = "";
 
     const pacienteExiste = pacientes.value.some(
         (paciente) => paciente.id === nuevoTurno.idPaciente
     );
-
     const medicoExiste = medicos.value.some(
         (medico) => medico.id === nuevoTurno.idMedico
     );
@@ -305,47 +484,148 @@ function registrarTurno() {
         return;
     }
 
-    if (!nuevoTurno.horaInicio || !horariosDisponibles.value.includes(nuevoTurno.horaInicio)) {
-        error.value = "El horario seleccionado ya no está disponible. Elegí otro.";
+    if (
+        !nuevoTurno.horaInicio ||
+        !horariosDisponibles.value.includes(nuevoTurno.horaInicio)
+    ) {
+        error.value =
+            "El horario seleccionado ya no está disponible. Elegí otro.";
         return;
     }
 
-    if (nuevoTurno.costo < 0) {
-        error.value = "El costo no puede ser negativo.";
+    if (!Number.isSafeInteger(nuevoTurno.costo) || nuevoTurno.costo < 0) {
+        error.value =
+            "El costo debe ser un número entero igual o mayor a cero.";
         return;
     }
 
     const inicioMinutos = convertirHoraAMinutos(nuevoTurno.horaInicio);
     const horaFin = convertirMinutosAHora(inicioMinutos + 30);
 
-    const nuevoRegistro: Turno = {
-        id: Math.max(0, ...turnos.value.map((turno) => turno.id)) + 1,
-        idPaciente: nuevoTurno.idPaciente,
-        idMedico: nuevoTurno.idMedico,
-        fecha: nuevoTurno.fecha,
-        horaInicio: nuevoTurno.horaInicio,
-        horaFin,
-        estado: "Programado",
-        costo: nuevoTurno.costo
-    };
+    const fechaHoraInicio = new Date(
+        `${nuevoTurno.fecha}T${nuevoTurno.horaInicio}:00`
+    );
+    const fechaHoraFin = new Date(
+        `${nuevoTurno.fecha}T${horaFin}:00`
+    );
 
-    turnos.value.push(nuevoRegistro);
-    fechaSeleccionada.value = nuevoTurno.fecha;
-    mostrarFormulario.value = false;
-    mensaje.value = "El turno fue reservado correctamente.";
+    if (
+        Number.isNaN(fechaHoraInicio.getTime()) ||
+        Number.isNaN(fechaHoraFin.getTime())
+    ) {
+        error.value = "La fecha o el horario seleccionado no son válidos.";
+        return;
+    }
+
+    registrando.value = true;
+
+    try {
+        const respuesta = await fetch("/api/admisiones/turnos", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                idPaciente: nuevoTurno.idPaciente,
+                idMedico: nuevoTurno.idMedico,
+                fechaHoraInicio: fechaHoraInicio.toISOString(),
+                fechaHoraFin: fechaHoraFin.toISOString(),
+                costo: nuevoTurno.costo
+            })
+        });
+
+        const datos = await respuesta.json().catch(() => ({})) as RespuestaMensaje;
+
+        if (respuesta.status === 401) {
+            error.value = "Tu sesión expiró. Volvé a iniciar sesión.";
+            return;
+        }
+
+        if (!respuesta.ok) {
+            throw new Error(
+                datos.mensaje ?? "No se pudo reservar el turno."
+            );
+        }
+
+        const fechaTurno = nuevoTurno.fecha;
+
+        mostrarFormulario.value = false;
+        fechaSeleccionada.value = fechaTurno;
+
+        mensaje.value =
+            datos.mensaje ?? "El turno fue reservado correctamente.";
+
+        await cargarTurnosFecha(fechaTurno);
+    } catch (err) {
+        error.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al reservar el turno.";
+    } finally {
+        registrando.value = false;
+    }
 }
 
-function confirmarTurno(id: number) {
-    const turno = turnos.value.find((item) => item.id === id);
+// =====================================================
+// CONFIRMAR TURNO
+// =====================================================
+
+async function confirmarTurno(id: number) {
+    mensaje.value = "";
+    errorCarga.value = "";
+
+    const turno = turnos.value.find(
+        (item) => item.id === id
+    );
 
     if (!turno || turno.estado !== "Programado") return;
 
-    turno.estado = "Confirmado";
-    mensaje.value = "El turno fue confirmado correctamente.";
+    try {
+        const respuesta = await fetch(
+            `/api/admisiones/turnos/${id}/estado`,
+            {
+                method: "PATCH",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    nuevoEstado: "Confirmado"
+                })
+            }
+        );
+
+        const datos = await respuesta.json().catch(() => ({})) as RespuestaMensaje;
+
+        if (respuesta.status === 401) {
+            throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+        }
+
+        if (!respuesta.ok) {
+            throw new Error(
+                datos.mensaje ?? "No se pudo confirmar el turno."
+            );
+        }
+
+        await cargarTurnosFecha(turno.fecha);
+
+        mensaje.value =
+            datos.mensaje ?? "El turno fue confirmado correctamente.";
+    } catch (err) {
+        errorCarga.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al confirmar el turno.";
+    }
 }
 
-function cancelarTurno(id: number) {
-    const turno = turnos.value.find((item) => item.id === id);
+// =====================================================
+// CANCELAR TURNO
+// =====================================================
+
+async function cancelarTurno(id: number) {
+    const turno = turnos.value.find(
+        (item) => item.id === id
+    );
 
     if (
         !turno ||
@@ -361,9 +641,48 @@ function cancelarTurno(id: number) {
 
     if (!confirmar) return;
 
-    turno.estado = "Cancelado";
-    mensaje.value = "El turno fue cancelado correctamente.";
+    mensaje.value = "";
+    errorCarga.value = "";
+
+    try {
+        const respuesta = await fetch(
+            `/api/admisiones/turnos/${id}`,
+            {
+                method: "DELETE",
+                credentials: "same-origin"
+            }
+        );
+
+        const datos = await respuesta.json().catch(() => ({})) as RespuestaMensaje;
+
+        if (respuesta.status === 401) {
+            throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+        }
+
+        if (!respuesta.ok) {
+            throw new Error(
+                datos.mensaje ?? "No se pudo cancelar el turno."
+            );
+        }
+
+        await cargarTurnosFecha(turno.fecha);
+
+        mensaje.value =
+            datos.mensaje ?? "El turno fue cancelado correctamente.";
+    } catch (err) {
+        errorCarga.value = err instanceof Error
+            ? err.message
+            : "Ocurrió un error al cancelar el turno.";
+    }
 }
+
+// =====================================================
+// CARGA INICIAL
+// =====================================================
+
+onMounted(() => {
+    void cargarDatos();
+});
 </script>
 
 <template>
@@ -384,6 +703,25 @@ function cancelarTurno(id: number) {
         <div v-if="mensaje" class="feedback success">
             {{ mensaje }}
             <button type="button" @click="mensaje = ''">×</button>
+        </div>
+
+        <div v-if="cargando" class="feedback">
+            Cargando pacientes, médicos y turnos...
+        </div>
+
+        <div v-if="cargandoTurnos && !cargando" class="feedback">
+            Actualizando la agenda...
+        </div>
+
+        <div v-if="errorCarga" class="feedback error">
+            <span>{{ errorCarga }}</span>
+            <button
+                type="button"
+                class="retry-button"
+                @click="cargarDatos"
+            >
+                Reintentar
+            </button>
         </div>
 
         <section class="summary-grid">
@@ -436,7 +774,11 @@ function cancelarTurno(id: number) {
             <div class="filters">
                 <label class="filter-group">
                     <span>Fecha</span>
-                    <input v-model="fechaSeleccionada" type="date" />
+                    <input
+                        v-model="fechaSeleccionada"
+                        type="date"
+                        @change="cargarTurnosFecha(fechaSeleccionada)"
+                    />
                 </label>
 
                 <label class="filter-group search-filter">
@@ -605,7 +947,7 @@ function cancelarTurno(id: number) {
                                     :key="medico.id"
                                     :value="medico.id"
                                 >
-                                    {{ medico.nombre }} — {{ medico.especialidad }}
+                                    {{ medico.apellido }}, {{ medico.nombre }}
                                 </option>
                             </select>
                         </label>
@@ -647,7 +989,10 @@ function cancelarTurno(id: number) {
                         </label>
                     </div>
 
-                    <div v-if="horariosDisponibles.length === 0" class="availability-warning">
+                    <div
+                        v-if="horariosDisponibles.length === 0"
+                        class="availability-warning"
+                    >
                         No hay horarios disponibles para este médico y fecha.
                     </div>
 
@@ -665,9 +1010,9 @@ function cancelarTurno(id: number) {
                         <button
                             type="submit"
                             class="btn-primary"
-                            :disabled="horariosDisponibles.length === 0"
+                            :disabled="registrando || horariosDisponibles.length === 0"
                         >
-                            Registrar turno
+                            {{ registrando ? "Registrando..." : "Registrar turno" }}
                         </button>
                     </footer>
                 </form>
@@ -734,7 +1079,7 @@ button {
     font-weight: 600;
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
     background: #066da9;
 }
 
@@ -751,10 +1096,13 @@ button {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     margin-top: 18px;
     padding: 12px 15px;
     border-radius: 8px;
     font-size: 13px;
+    color: #526174;
+    background: #edf4fa;
 }
 
 .feedback.success {
@@ -772,6 +1120,17 @@ button {
 .feedback.error {
     color: #b42318;
     background: #fff0ee;
+}
+
+.retry-button {
+    flex-shrink: 0;
+    padding: 6px 10px;
+    border: 1px solid #e3c4c0;
+    border-radius: 6px;
+    background: white;
+    color: #b42318;
+    font-size: 11px;
+    font-weight: 600;
 }
 
 .summary-grid {

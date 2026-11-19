@@ -2,7 +2,7 @@ import type { Database } from '../../../../database/connectionDB.js'
 import type { FieldPacket, ResultSetHeader, RowDataPacket } from 'mysql2/promise'
 import type { EjecutorMysql } from './ContratosMysql.js'
 
-// Sólo lecturas. La conexión actual NO satisface ProveedorTransaccionesMysql.
+// Adapta sentencias individuales; las operaciones de varias sentencias usan ProveedorTransaccionesMysql.
 export class ConsultaMysqlCompartida implements EjecutorMysql {
   constructor(private readonly database: Pick<Database, 'query'>) {}
 

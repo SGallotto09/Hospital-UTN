@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Cama, AccionCama } from '../services/recursosCamasApi'
+import { permisosCamas } from '../services/permisosCamas'
 defineProps<{ cama: Cama; deshabilitada: boolean }>()
 defineEmits<{ asignar: [cama: Cama]; transicionar: [cama: Cama, accion: AccionCama] }>()
 </script>
@@ -21,33 +22,33 @@ defineEmits<{ asignar: [cama: Cama]; transicionar: [cama: Cama, accion: AccionCa
     <p v-if="cama.estado === 'Libre' && !cama.disponible" class="advertencia">
       Tiene una asignación activa. Revisar disponibilidad.
     </p>
-    <button :disabled="!cama.disponible || deshabilitada" @click="$emit('asignar', cama)">
+    <button v-if="permisosCamas.asignar" :disabled="!cama.disponible || deshabilitada" @click="$emit('asignar', cama)">
       {{ cama.disponible ? 'Asignar paciente' : 'No disponible' }}
     </button>
     <div class="operaciones">
       <button
-        v-if="cama.estado === 'Ocupada'"
+        v-if="permisosCamas.liberar && cama.estado === 'Ocupada'"
         :disabled="deshabilitada || !cama.idAsignacionActiva"
         @click="$emit('transicionar', cama, 'liberar')"
       >
         Liberar por alta o traslado
       </button>
       <button
-        v-if="cama.estado === 'En limpieza'"
+        v-if="permisosCamas.limpiar && cama.estado === 'En limpieza'"
         :disabled="deshabilitada || !!cama.idAsignacionActiva"
         @click="$emit('transicionar', cama, 'confirmar-limpieza')"
       >
         Confirmar limpieza
       </button>
       <button
-        v-if="cama.estado === 'En limpieza' || cama.estado === 'Libre'"
+        v-if="permisosCamas.mantener && (cama.estado === 'En limpieza' || cama.estado === 'Libre')"
         :disabled="deshabilitada || !!cama.idAsignacionActiva"
         @click="$emit('transicionar', cama, 'bloquear')"
       >
         Bloquear por mantenimiento
       </button>
       <button
-        v-if="cama.estado === 'Bloqueada'"
+        v-if="permisosCamas.mantener && cama.estado === 'Bloqueada'"
         :disabled="deshabilitada || !!cama.idAsignacionActiva"
         @click="$emit('transicionar', cama, 'finalizar-mantenimiento')"
       >
@@ -137,6 +138,9 @@ p {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+.operaciones:empty {
+  display: none;
 }
 button {
   max-width: 100%;

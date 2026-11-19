@@ -1,5 +1,6 @@
+import { rolActual } from '../../../../router/autenticacion'
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import CamaCard from '../components/CamaCard.vue'
@@ -24,6 +25,9 @@ const cama: Cama = {
   idAsignacionActiva: 50,
 }
 
+beforeEach(() => { rolActual.value = 'Administrador' })
+afterEach(() => { rolActual.value = null })
+
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 const resultado: ResultadoTransicion = {
   idCama: 101,
@@ -36,6 +40,8 @@ const boton = (wrapper: ReturnType<typeof mount>, texto: string) =>
   wrapper.findAll('button').find((b) => b.text() === texto)!
 function crearApi(inicial: Cama = cama): CamasApi {
   return {
+    crear: vi.fn(),
+    listarTipos: vi.fn(),
     listar: vi.fn().mockResolvedValue([inicial]),
     asignar: vi.fn(),
     buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),

@@ -1,5 +1,29 @@
 # Gestión de Recursos y Camas
 
+## Alta de camas desde el mapa
+
+`+ Nueva cama` abre un panel con habitación, piso y tipo obtenido de MySQL.
+`POST /api/recursos-camas/camas` recibe `{ habitacion, piso, idTipoCama }` y
+devuelve HTTP 201 con `{ cama: { id, estado: "Libre" } }`. El estado lo fija el
+servidor y no se crea ninguna asignación. El mapa se recarga automáticamente y se
+limpian sus filtros para mostrar la nueva cama. No se reintenta automáticamente un POST.
+
+`GET /api/recursos-camas/tipos-cama` entrega `{ tipos: [{ id, nombre }] }`.
+Ambas operaciones requieren sesión y permiso `camas:crear`, exclusivo de
+Administrador. Los otros permisos permanecen iguales; el montaje de sólo lectura
+no expone estos endpoints. Los rechazos se muestran en la interfaz.
+
+Habitación y tipo: enteros positivos dentro del rango INT; piso: entero INT,
+incluida planta baja y subsuelos. La FK de `tipo_cama` rechaza tipos inexistentes.
+Se utiliza una única inserción parametrizada con el ID autogenerado por MySQL.
+El esquema real sólo exige unicidad del ID: permite varias camas del mismo tipo
+en una habitación/piso. Sin un identificador físico adicional no puede detectarse
+un alta repetida como la misma cama; no se inventa esa restricción. Una violación
+de índice único de MySQL se traduce a 409. El formulario evita envíos simultáneos.
+
+El esquema y los tipos existentes se inspeccionaron mediante lectura. Las altas
+se verifican con conexión simulada; no se insertaron camas de prueba en MySQL real.
+
 Módulo del monolito Hospital-UTN: backend Node.js/Express/TypeScript y frontend Vue 3.
 Referencias: historias de usuario y dump `hospital_utn (3).sql` (MySQL 8.0.46).
 

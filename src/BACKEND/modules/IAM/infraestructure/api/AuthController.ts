@@ -8,6 +8,13 @@ export class AuthController {
         private iniciarSesion: IniciarSesion
     ) {}
 
+    sesion(req: Request, res: Response): void {
+        res.json({
+            usuario: { id: req.session.usuarioId, rol: req.session.rol },
+            expira: req.session.cookie.expires?.toISOString() ?? null,
+        });
+    }
+
     async login(req: Request, res: Response): Promise<void> {
 
         try {

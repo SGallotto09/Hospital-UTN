@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import { permisosCamas } from '../services/permisosCamas'
 </script>
 
 <template>
   <nav class="module-nav" aria-label="Recursos y camas">
     <RouterLink to="/recursos-camas">Mapa de camas</RouterLink>
-    <RouterLink to="/recursos-camas/inventario">Inventario de insumos</RouterLink>
+    <RouterLink v-if="permisosCamas.inventario" to="/recursos-camas/inventario">Inventario de insumos</RouterLink>
   </nav>
 </template>
 

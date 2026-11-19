@@ -8,7 +8,7 @@ export interface PermisosPorRol {
 const rolesIAM = ['Administrador', 'Médico', 'Enfermero', 'Recepcionista', 'Limpieza']
 
 export const permisosRecursosCamasPorRol: PermisosPorRol = {
-  Administrador: ['camas:consultar', 'camas:asignar', 'camas:liberar', 'camas:limpiar', 'camas:mantener', 'inventario:consultar'],
+  Administrador: ['camas:consultar', 'camas:crear', 'camas:asignar', 'camas:liberar', 'camas:limpiar', 'camas:mantener', 'inventario:consultar'],
   Recepcionista: ['camas:consultar', 'camas:asignar', 'camas:liberar'],
   Médico: ['camas:consultar'],
   Enfermero: ['camas:consultar', 'inventario:consultar'],

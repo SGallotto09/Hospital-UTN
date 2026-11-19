@@ -28,7 +28,7 @@ interface ListaEsperaRow extends RowDataPacket {
     id_paciente: number;
     id_medico: number;
     fecha_solicitada: string;
-    fecha_hora_ingreso: string;
+    fecha_hora_ingreso: Date | string | number;
     estado: EstadoListaEspera;
 
 }
@@ -70,12 +70,10 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
     ): Promise<T> {
 
         if (this.connection) {
-
             return operacion(this.connection);
-
         }
 
-        return this.database.ejecutarTransaccion(operacion);
+        return this.database.withTransaction(operacion);
 
     }
 
@@ -97,7 +95,6 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
         return this.ejecutarEnTransaccion(async connection => {
 
             // 1. Bloquear el registro del paciente
-            // Esto permite evitar solicitudes duplicadas simultáneas
             const [pacientes] = await connection.execute<RowDataPacket[]>(
                 `
                     SELECT id
@@ -133,7 +130,7 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
                     [
                         listaEspera.idPaciente,
                         listaEspera.idMedico,
-                        listaEspera.fechaSolicitada,
+                        listaEspera.fechaSolicitada
                     ]
                 );
 
@@ -148,7 +145,6 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
 
 
             // 3. Insertar la solicitud
-            // fecha_hora_ingreso utiliza CURRENT_TIMESTAMP
             const [resultado] =
                 await connection.execute<ResultSetHeader>(
                     `
@@ -201,6 +197,19 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
     }
 
 
+    // Buscar una solicitud por ID
+    async buscarPorId(
+        id: number
+    ): Promise<ListaEspera | null> {
+
+        return this.buscarPorIdInterno(
+            this.connection,
+            id
+        );
+
+    }
+
+
     // Buscar si un paciente ya tiene una solicitud pendiente
     async buscarPendientePorPaciente(
         idPaciente: number,
@@ -241,12 +250,53 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
         const filas = resultado as ListaEsperaRow[];
 
         if (filas.length === 0) {
-
             return null;
-
         }
 
         return this.mapearListaEspera(filas[0]);
+
+    }
+
+
+    // Listar todas las solicitudes, con filtro opcional por estado
+    async listarTodos(
+        estado?: EstadoListaEspera
+    ): Promise<ListaEspera[]> {
+
+        let sql = `
+            SELECT
+                id,
+                id_paciente,
+                id_medico,
+                DATE_FORMAT(fecha_solicitada, '%Y-%m-%d')
+                    AS fecha_solicitada,
+                DATE_FORMAT(fecha_hora_ingreso, '%Y-%m-%d %H:%i:%s')
+                    AS fecha_hora_ingreso,
+                estado
+            FROM lista_espera
+        `;
+
+        const valores: any[] = [];
+
+        if (estado !== undefined) {
+            sql += " WHERE estado = ?";
+            valores.push(estado);
+        }
+
+        sql += `
+            ORDER BY fecha_hora_ingreso ASC, id ASC
+        `;
+
+        const resultado = await this.ejecutarConsulta(
+            sql,
+            valores
+        );
+
+        const filas = resultado as ListaEsperaRow[];
+
+        return filas.map(
+            fila => this.mapearListaEspera(fila)
+        );
 
     }
 
@@ -297,9 +347,7 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
 
 
         if (resultado.length === 0) {
-
             return null;
-
         }
 
         return this.mapearListaEspera(resultado[0]);
@@ -308,7 +356,9 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
 
 
     // Actualizar el estado de una solicitud
-    async actualizar(listaEspera: ListaEspera): Promise<void> {
+    async actualizar(
+        listaEspera: ListaEspera
+    ): Promise<void> {
 
         if (listaEspera.id === null) {
 
@@ -338,8 +388,6 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
         const updateResult = resultado as ResultSetHeader;
 
 
-        // Si affectedRows es cero, comprobamos si el registro existe.
-        // Puede ser que el estado ya tuviera el mismo valor.
         if (updateResult.affectedRows === 0) {
 
             const solicitudExistente = await this.buscarPorIdInterno(
@@ -360,7 +408,7 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
     }
 
 
-    // Buscar una solicitud por ID
+    // Buscar una solicitud por ID utilizando una conexión específica
     private async buscarPorIdInterno(
         connection: PoolConnection | undefined,
         id: number
@@ -390,14 +438,13 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
         const filas = resultado as ListaEsperaRow[];
 
         if (filas.length === 0) {
-
             return null;
-
         }
 
         return this.mapearListaEspera(filas[0]);
 
     }
+    
 
 
     // Convertir una fila de MySQL en una entidad ListaEspera
@@ -427,22 +474,43 @@ export class MySQLListaEsperaRepository implements IListaEsperaRepository {
 
 
     // Convertir DATETIME de MySQL a Date
-    private convertirFechaHora(fecha: string): Date {
+    private convertirFechaHora(
+        fecha: Date | string | number
+    ): Date {
 
-        const fechaConvertida = new Date(
-            fecha.replace(" ", "T")
-        );
+        let resultado: Date;
 
+        if (fecha instanceof Date) {
 
-        if (Number.isNaN(fechaConvertida.getTime())) {
+            resultado = new Date(fecha.getTime());
+
+        } else if (typeof fecha === "string") {
+
+            resultado = new Date(
+                fecha.replace(" ", "T")
+            );
+
+        } else if (typeof fecha === "number") {
+
+            resultado = new Date(fecha);
+
+        } else {
 
             throw new Error(
-                "La fecha y hora de ingreso de la lista de espera no son válidas."
+                "El formato de fecha de ingreso no es compatible."
             );
 
         }
 
-        return fechaConvertida;
+        if (Number.isNaN(resultado.getTime())) {
+
+            throw new Error(
+                "La fecha de ingreso almacenada en MySQL no es válida."
+            );
+
+        }
+
+        return resultado;
 
     }
 

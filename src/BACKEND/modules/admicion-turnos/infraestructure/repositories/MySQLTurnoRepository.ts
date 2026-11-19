@@ -442,10 +442,10 @@ export class MySQLTurnoRepository implements ITurnoRepository {
             `
                 SELECT id
                 FROM usuarios
-                WHERE id = ?
+                WHERE id = ? AND rol = ?
                 FOR UPDATE
             `,
-            [idMedico]
+            [idMedico, "Médico"]
         );
 
         if (resultado.length === 0) {

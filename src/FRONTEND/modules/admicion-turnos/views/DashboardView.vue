@@ -176,25 +176,6 @@ function navegar(destino: Destino) {
 
             </div>
 
-
-            <div class="header-actions">
-
-                <button
-                    class="button-secondary"
-                    @click="navegar('agenda')"
-                >
-                    Ver agenda
-                </button>
-
-                <button
-                    class="button-primary"
-                    @click="navegar('turnos')"
-                >
-                    + Nuevo turno
-                </button>
-
-            </div>
-
         </header>
 
 
@@ -448,58 +429,6 @@ function navegar(destino: Destino) {
         </section>
 
 
-        <!-- ACCESOS RÁPIDOS -->
-
-        <section class="quick-actions">
-
-            <h2>Accesos rápidos</h2>
-
-            <div class="quick-actions-grid">
-
-                <button
-                    class="quick-action"
-                    @click="navegar('pacientes')"
-                >
-                    <span>♙</span>
-                    <strong>Registrar paciente</strong>
-                    <small>Incorporar un nuevo paciente</small>
-                </button>
-
-
-                <button
-                    class="quick-action"
-                    @click="navegar('turnos')"
-                >
-                    <span>▦</span>
-                    <strong>Reservar turno</strong>
-                    <small>Asignar una cita médica</small>
-                </button>
-
-
-                <button
-                    class="quick-action"
-                    @click="navegar('agenda')"
-                >
-                    <span>◷</span>
-                    <strong>Consultar agenda</strong>
-                    <small>Revisar horarios médicos</small>
-                </button>
-
-
-                <button
-                    class="quick-action"
-                    @click="navegar('triaje')"
-                >
-                    <span>♡</span>
-                    <strong>Ingresar a guardia</strong>
-                    <small>Registrar un paciente urgente</small>
-                </button>
-
-            </div>
-
-        </section>
-
-
         <div class="demo-notice">
             Los datos mostrados son ilustrativos. La información real se obtendrá de la API del hospital.
         </div>
@@ -556,43 +485,9 @@ function navegar(destino: Destino) {
     text-transform: capitalize;
 }
 
-.header-actions {
-    display: flex;
-    gap: 10px;
-}
-
 button {
     font-family: inherit;
     cursor: pointer;
-}
-
-.button-primary,
-.button-secondary {
-    padding: 11px 17px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    transition: 0.2s;
-}
-
-.button-primary {
-    background: #2563eb;
-    color: white;
-    border: 1px solid #2563eb;
-}
-
-.button-primary:hover {
-    background: #1d4ed8;
-}
-
-.button-secondary {
-    background: white;
-    border: 1px solid #e2e8f0;
-    color: #334155;
-}
-
-.button-secondary:hover {
-    background: #f8fafc;
 }
 
 
@@ -896,57 +791,6 @@ tbody tr:last-child td {
 }
 
 
-/* ACCESOS RÁPIDOS */
-
-.quick-actions {
-    margin-top: 25px;
-}
-
-.quick-actions h2 {
-    font-size: 16px;
-    margin-bottom: 15px;
-}
-
-.quick-actions-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 15px;
-}
-
-.quick-action {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    text-align: left;
-    gap: 9px;
-    padding: 18px;
-    background: white;
-    border: 1px solid #e8edf3;
-    border-radius: 12px;
-    transition: 0.2s;
-}
-
-.quick-action:hover {
-    border-color: #93c5fd;
-    transform: translateY(-2px);
-}
-
-.quick-action > span {
-    font-size: 22px;
-    color: #2563eb;
-}
-
-.quick-action strong {
-    font-size: 12px;
-    color: #334155;
-}
-
-.quick-action small {
-    color: #94a3b8;
-    font-size: 11px;
-}
-
-
 /* AVISO DE DATOS DE PRUEBA */
 
 .demo-notice {
@@ -971,10 +815,6 @@ tbody tr:last-child td {
         grid-template-columns: 1fr;
     }
 
-    .quick-actions-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
 }
 
 
@@ -988,14 +828,6 @@ tbody tr:last-child td {
         flex-direction: column;
     }
 
-    .header-actions {
-        width: 100%;
-    }
-
-    .header-actions button {
-        flex: 1;
-    }
-
     .indicators-grid {
         grid-template-columns: 1fr 1fr;
         gap: 10px;
@@ -1007,11 +839,6 @@ tbody tr:last-child td {
 
     .indicator-value {
         font-size: 25px;
-    }
-
-    .quick-actions-grid {
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
     }
 
 }

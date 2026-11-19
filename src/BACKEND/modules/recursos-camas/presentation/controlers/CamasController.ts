@@ -7,6 +7,8 @@ import type { TransicionarCama } from '../../application/use-cases/TransicionarC
 import type { AccionCama } from '../../domain/repositories/ITransicionCamaRepository.js'
 import { validarTransicion } from '../validators/transicionValidator.js'
 import type { IPacienteGateway } from '../../application/ports/IPacienteGateway.js'
+import type { ICamaRepository } from '../../domain/repositories/ICamaRepository.js'
+import type { RegistrarCama } from '../../application/use-cases/RegistrarCama.js'
 
 export interface ActorRecursosCamas {
   idUsuario: number
@@ -23,6 +25,8 @@ export class CamasController {
     private readonly obtenerActor: ObtenerActor,
     private readonly transicionarCama: TransicionarCama | undefined,
     private readonly pacientes?: IPacienteGateway,
+    private readonly registrarCama?: RegistrarCama,
+    private readonly catalogoCamas?: ICamaRepository,
   ) {}
 
   private exigirPermiso(req: Request, permiso: string): ActorRecursosCamas {
@@ -43,6 +47,23 @@ export class CamasController {
     } catch (error) {
       next(error)
     }
+  }
+
+  listarTipos = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      this.exigirPermiso(req, 'camas:crear')
+      if (!this.catalogoCamas) throw new Error('El alta de camas no está disponible.')
+      res.json({ tipos: await this.catalogoCamas.listarTipos() })
+    } catch (error) { next(error) }
+  }
+
+  crear = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      this.exigirPermiso(req, 'camas:crear')
+      if (!this.registrarCama) throw new Error('El alta de camas no está disponible.')
+      const id = await this.registrarCama.ejecutar(req.body)
+      res.status(201).json({ cama: { id, estado: 'Libre' } })
+    } catch (error) { next(error) }
   }
 
   buscarPaciente = async (req: Request, res: Response, next: NextFunction): Promise<void> => {

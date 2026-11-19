@@ -95,7 +95,7 @@ describe('roles aprobados y registro IAM', () => {
     ['Recepcionista', ['camas:consultar', 'camas:asignar', 'camas:liberar']],
     ['Médico', ['camas:consultar']],
     ['Enfermero', ['camas:consultar', 'inventario:consultar']],
-    ['Administrador', ['camas:consultar', 'camas:asignar', 'camas:liberar', 'camas:limpiar', 'camas:mantener', 'inventario:consultar']],
+    ['Administrador', ['camas:consultar', 'camas:crear', 'camas:asignar', 'camas:liberar', 'camas:limpiar', 'camas:mantener', 'inventario:consultar']],
   ])('permisos exactos de %s', (rol, permisos) => {
     const req = { session: { usuarioId: 1, rol } } as Request
     expect(crearObtenerActorDesdeSesion(permisosRecursosCamasPorRol)(req)?.permisos).toEqual(permisos)

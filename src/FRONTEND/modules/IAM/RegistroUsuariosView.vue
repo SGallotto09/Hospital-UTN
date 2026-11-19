@@ -126,6 +126,7 @@ async function registrarUsuario() {
                         <option value="Médico">Médico</option>
                         <option value="Enfermero">Enfermero</option>
                         <option value="Recepcionista">Recepcionista</option>
+                        <option value="Limpieza">Limpieza</option>
                     </select>
                 </div>
             </div>
