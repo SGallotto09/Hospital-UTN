@@ -1,8 +1,15 @@
 
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 
-type EstadoListaEspera = "EN_ESPERA" | "ASIGNADO" | "RETIRADO";
+// ==========================================
+// TIPOS
+// ==========================================
+
+type EstadoListaEspera =
+    | "EN_ESPERA"
+    | "ASIGNADO"
+    | "CANCELADO";
 
 interface Paciente {
     id: number;
@@ -11,20 +18,30 @@ interface Paciente {
     dni: string;
 }
 
-interface Medico {
-    id: number;
-    nombre: string;
-    especialidad: string;
-}
-
 interface PacienteEnEspera {
     id: number;
     idPaciente: number;
     idMedico: number;
     fechaSolicitada: string;
-    fechaHoraIngreso: number;
+    fechaHoraIngreso: string;
     estado: EstadoListaEspera;
 }
+
+// ==========================================
+// ESTADO
+// ==========================================
+
+const pacientes = ref<Paciente[]>([]);
+const listaEspera = ref<PacienteEnEspera[]>([]);
+
+const cargando = ref(false);
+const guardando = ref(false);
+const cancelandoId = ref<number | null>(null);
+
+const mostrarFormulario = ref(false);
+const mensaje = ref("");
+const error = ref("");
+const errorFormulario = ref("");
 
 function obtenerFechaLocal(fecha: Date): string {
     const anio = fecha.getFullYear();
@@ -36,156 +53,295 @@ function obtenerFechaLocal(fecha: Date): string {
 
 const fechaHoy = obtenerFechaLocal(new Date());
 
-const pacientes = ref<Paciente[]>([
-    { id: 1, nombre: "Carlos", apellido: "López", dni: "35678901" },
-    { id: 2, nombre: "Lucía", apellido: "Fernández", dni: "42156890" },
-    { id: 3, nombre: "Mariana", apellido: "Gómez", dni: "39876543" },
-    { id: 4, nombre: "Martín", apellido: "Rodríguez", dni: "33214567" }
-]);
-
-const medicos = ref<Medico[]>([
-    { id: 1, nombre: "Dr. Silva", especialidad: "Cardiología" },
-    { id: 2, nombre: "Dra. Torres", especialidad: "Pediatría" },
-    { id: 3, nombre: "Dr. Pérez", especialidad: "Clínica médica" }
-]);
-
-const listaEspera = ref<PacienteEnEspera[]>([
-    {
-        id: 1,
-        idPaciente: 1,
-        idMedico: 1,
-        fechaSolicitada: fechaHoy,
-        fechaHoraIngreso: Date.now() - 3600000,
-        estado: "EN_ESPERA"
-    },
-    {
-        id: 2,
-        idPaciente: 2,
-        idMedico: 1,
-        fechaSolicitada: fechaHoy,
-        fechaHoraIngreso: Date.now() - 1800000,
-        estado: "EN_ESPERA"
-    },
-    {
-        id: 3,
-        idPaciente: 3,
-        idMedico: 2,
-        fechaSolicitada: fechaHoy,
-        fechaHoraIngreso: Date.now() - 900000,
-        estado: "EN_ESPERA"
-    },
-    {
-        id: 4,
-        idPaciente: 4,
-        idMedico: 3,
-        fechaSolicitada: fechaHoy,
-        fechaHoraIngreso: Date.now(),
-        estado: "EN_ESPERA"
-    }
-]);
-
-const mostrarFormulario = ref(false);
-const mensaje = ref("");
-const error = ref("");
-
 const nuevoRegistro = reactive({
     idPaciente: 0,
     idMedico: 0,
     fechaSolicitada: fechaHoy
 });
 
-// Solo mostramos los pacientes que continúan esperando.
+// ==========================================
+// NORMALIZACIÓN DE DATOS
+// ==========================================
+
+// Las entidades del backend pueden serializar propiedades
+// privadas con "_" y los getters no aparecen en JSON.
+// Por eso contemplamos ambas representaciones.
+
+function obtenerPropiedad(
+    objeto: Record<string, unknown>,
+    ...nombres: string[]
+): unknown {
+    for (const nombre of nombres) {
+        if (objeto[nombre] !== undefined) {
+            return objeto[nombre];
+        }
+    }
+
+    return undefined;
+}
+
+function normalizarPaciente(datos: unknown): Paciente {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: Number(obtenerPropiedad(objeto, "id")),
+        nombre: String(obtenerPropiedad(objeto, "nombre", "_nombre") ?? ""),
+        apellido: String(obtenerPropiedad(objeto, "apellido", "_apellido") ?? ""),
+        dni: String(obtenerPropiedad(objeto, "dni", "_dni") ?? "")
+    };
+}
+
+function normalizarSolicitud(datos: unknown): PacienteEnEspera {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: Number(obtenerPropiedad(objeto, "id")),
+        idPaciente: Number(obtenerPropiedad(objeto, "idPaciente", "_idPaciente")),
+        idMedico: Number(obtenerPropiedad(objeto, "idMedico", "_idMedico")),
+        fechaSolicitada: String(
+            obtenerPropiedad(objeto, "fechaSolicitada", "_fechaSolicitada") ?? ""
+        ).slice(0, 10),
+        fechaHoraIngreso: String(
+            obtenerPropiedad(objeto, "fechaHoraIngreso", "_fechaHoraIngreso") ?? ""
+        ),
+        estado: String(
+            obtenerPropiedad(objeto, "estado", "_estado") ?? "EN_ESPERA"
+        ) as EstadoListaEspera
+    };
+}
+
+// ==========================================
+// COMUNICACIÓN CON EL BACKEND
+// ==========================================
+
+async function solicitarAPI<T>(
+    url: string,
+    opciones: RequestInit = {}
+): Promise<T> {
+
+    const respuesta = await fetch(url, {
+        ...opciones,
+        credentials: "same-origin",
+        headers: {
+            ...(opciones.body
+                ? { "Content-Type": "application/json" }
+                : {}),
+            ...opciones.headers
+        }
+    });
+
+    const datos = await respuesta.json().catch(() => ({}));
+
+    if (!respuesta.ok) {
+        throw new Error(
+            datos.mensaje ||
+            `Error del servidor: ${respuesta.status}`
+        );
+    }
+
+    return datos as T;
+}
+
+// ==========================================
+// CARGAR PACIENTES
+// ==========================================
+
+async function cargarPacientes(): Promise<void> {
+
+    const respuesta = await solicitarAPI<{
+        pacientes: unknown[]
+    }>("/api/admisiones/pacientes");
+
+    if (!Array.isArray(respuesta.pacientes)) {
+        throw new Error("La respuesta de pacientes no tiene el formato esperado.");
+    }
+
+    pacientes.value = respuesta.pacientes.map(normalizarPaciente);
+}
+
+// ==========================================
+// CARGAR LISTA DE ESPERA
+// ==========================================
+
+async function cargarListaEspera(): Promise<void> {
+
+    const respuesta = await solicitarAPI<{
+        solicitudes: unknown[]
+    }>("/api/admisiones/lista-espera?estado=EN_ESPERA");
+
+    if (!Array.isArray(respuesta.solicitudes)) {
+        throw new Error("La respuesta de la lista de espera no tiene el formato esperado.");
+    }
+
+    listaEspera.value = respuesta.solicitudes.map(normalizarSolicitud);
+}
+
+// ==========================================
+// CARGAR INFORMACIÓN INICIAL
+// ==========================================
+
+async function cargarDatos(): Promise<void> {
+
+    cargando.value = true;
+    error.value = "";
+
+    try {
+        await Promise.all([
+            cargarPacientes(),
+            cargarListaEspera()
+        ]);
+
+    } catch (err) {
+
+        error.value = err instanceof Error
+            ? err.message
+            : "No se pudieron cargar los datos.";
+
+    } finally {
+
+        cargando.value = false;
+
+    }
+}
+
+onMounted(() => {
+    void cargarDatos();
+});
+
+// ==========================================
+// DATOS COMPUTADOS
+// ==========================================
+
 const pacientesEnEspera = computed(() =>
-    listaEspera.value
-        .filter((registro) => registro.estado === "EN_ESPERA")
-        .sort((a, b) => a.fechaHoraIngreso - b.fechaHoraIngreso)
+    [...listaEspera.value]
+        .filter(registro => registro.estado === "EN_ESPERA")
+        .sort(
+            (a, b) =>
+                new Date(a.fechaHoraIngreso).getTime() -
+                new Date(b.fechaHoraIngreso).getTime()
+        )
 );
 
 function obtenerPaciente(id: number): Paciente | undefined {
-    return pacientes.value.find((paciente) => paciente.id === id);
-}
-
-function obtenerMedico(id: number): Medico | undefined {
-    return medicos.value.find((medico) => medico.id === id);
+    return pacientes.value.find(paciente => paciente.id === id);
 }
 
 function formatearFecha(fecha: string): string {
-    const partes = fecha.split("-");
-    const anio = partes[0] ?? "";
-    const mes = partes[1] ?? "";
-    const dia = partes[2] ?? "";
+    if (!fecha) return "-";
 
-    return `${dia}/${mes}/${anio}`;
+    const partes = fecha.split("-");
+
+    return `${partes[2]}/${partes[1]}/${partes[0]}`;
 }
 
-function abrirFormulario() {
-    error.value = "";
+// ==========================================
+// FORMULARIO
+// ==========================================
+
+function abrirFormulario(): void {
+
+    errorFormulario.value = "";
     mensaje.value = "";
+    error.value = "";
 
     nuevoRegistro.idPaciente = pacientes.value[0]?.id ?? 0;
-    nuevoRegistro.idMedico = medicos.value[0]?.id ?? 0;
+    nuevoRegistro.idMedico = 0;
     nuevoRegistro.fechaSolicitada = fechaHoy;
 
     mostrarFormulario.value = true;
 }
 
-function agregarPaciente() {
-    error.value = "";
+function cerrarFormulario(): void {
+    mostrarFormulario.value = false;
+    errorFormulario.value = "";
+}
+
+// ==========================================
+// AGREGAR PACIENTE
+// ==========================================
+
+async function agregarPaciente(): Promise<void> {
+
+    errorFormulario.value = "";
     mensaje.value = "";
 
-    const pacienteExiste = pacientes.value.some(
-        (paciente) => paciente.id === nuevoRegistro.idPaciente
-    );
+    if (!nuevoRegistro.idPaciente || nuevoRegistro.idPaciente <= 0) {
+        errorFormulario.value = "Seleccioná un paciente válido.";
+        return;
+    }
 
-    const medicoExiste = medicos.value.some(
-        (medico) => medico.id === nuevoRegistro.idMedico
-    );
-
-    if (!pacienteExiste || !medicoExiste) {
-        error.value = "Seleccioná un paciente y un médico válidos.";
+    if (!nuevoRegistro.idMedico || nuevoRegistro.idMedico <= 0) {
+        errorFormulario.value = "Ingresá un ID de médico válido.";
         return;
     }
 
     if (!nuevoRegistro.fechaSolicitada) {
-        error.value = "Seleccioná la fecha solicitada.";
+        errorFormulario.value = "Seleccioná la fecha solicitada.";
         return;
     }
 
     if (nuevoRegistro.fechaSolicitada < fechaHoy) {
-        error.value = "La fecha solicitada no puede ser anterior a hoy.";
+        errorFormulario.value = "La fecha solicitada no puede ser anterior a hoy.";
         return;
     }
 
-    const yaExiste = listaEspera.value.some(
-        (registro) =>
-            registro.idPaciente === nuevoRegistro.idPaciente &&
-            registro.idMedico === nuevoRegistro.idMedico &&
-            registro.fechaSolicitada === nuevoRegistro.fechaSolicitada &&
-            registro.estado === "EN_ESPERA"
+    const pacienteExiste = pacientes.value.some(
+        paciente => paciente.id === nuevoRegistro.idPaciente
     );
 
-    if (yaExiste) {
-        error.value = "Este paciente ya está en la lista de espera para ese médico y fecha.";
+    if (!pacienteExiste) {
+        errorFormulario.value = "El paciente seleccionado no existe.";
         return;
     }
 
-    listaEspera.value.push({
-        id: Math.max(0, ...listaEspera.value.map((registro) => registro.id)) + 1,
-        idPaciente: nuevoRegistro.idPaciente,
-        idMedico: nuevoRegistro.idMedico,
-        fechaSolicitada: nuevoRegistro.fechaSolicitada,
-        fechaHoraIngreso: Date.now(),
-        estado: "EN_ESPERA"
-    });
+    guardando.value = true;
 
-    mostrarFormulario.value = false;
-    mensaje.value = "El paciente fue agregado a la lista de espera.";
+    try {
+
+        await solicitarAPI(
+            "/api/admisiones/lista-espera",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    idPaciente: nuevoRegistro.idPaciente,
+                    idMedico: nuevoRegistro.idMedico,
+                    fechaSolicitada: nuevoRegistro.fechaSolicitada
+                })
+            }
+        );
+
+        cerrarFormulario();
+
+        mensaje.value = "El paciente fue agregado correctamente a la lista de espera.";
+
+        await cargarListaEspera();
+
+    } catch (err) {
+
+        errorFormulario.value = err instanceof Error
+            ? err.message
+            : "No se pudo agregar al paciente.";
+
+    } finally {
+
+        guardando.value = false;
+
+    }
 }
 
-function cancelarInscripcion(id: number) {
-    const registro = listaEspera.value.find((item) => item.id === id);
+// ==========================================
+// CANCELAR SOLICITUD
+// ==========================================
 
-    if (!registro || registro.estado !== "EN_ESPERA") return;
+async function cancelarInscripcion(id: number): Promise<void> {
+
+    const registro = listaEspera.value.find(
+        item => item.id === id
+    );
+
+    if (!registro || registro.estado !== "EN_ESPERA") {
+        return;
+    }
 
     const paciente = obtenerPaciente(registro.idPaciente);
 
@@ -195,13 +351,45 @@ function cancelarInscripcion(id: number) {
 
     if (!confirmar) return;
 
-    registro.estado = "RETIRADO";
-    mensaje.value = "El paciente fue retirado de la lista de espera.";
+    cancelandoId.value = id;
+    error.value = "";
+    mensaje.value = "";
+
+    try {
+
+        await solicitarAPI(
+            `/api/admisiones/lista-espera/${id}`,
+            {
+                method: "DELETE"
+            }
+        );
+
+        listaEspera.value = listaEspera.value.filter(
+            item => item.id !== id
+        );
+
+        mensaje.value = "El paciente fue retirado de la lista de espera.";
+
+    } catch (err) {
+
+        error.value = err instanceof Error
+            ? err.message
+            : "No se pudo cancelar la solicitud.";
+
+    } finally {
+
+        cancelandoId.value = null;
+
+    }
 }
+
 </script>
 
 <template>
     <section class="lista-espera-view">
+
+        <!-- ENCABEZADO -->
+
         <header class="page-header">
             <div>
                 <span class="eyebrow">ADMISIONES</span>
@@ -209,22 +397,39 @@ function cancelarInscripcion(id: number) {
                 <p>Pacientes que esperan un turno con un profesional médico.</p>
             </div>
 
-            <button class="btn-primary" type="button" @click="abrirFormulario">
+            <button
+                class="btn-primary"
+                type="button"
+                @click="abrirFormulario"
+                :disabled="cargando || pacientes.length === 0"
+            >
                 <span>＋</span>
                 Agregar paciente
             </button>
         </header>
 
+        <!-- MENSAJES -->
+
         <div v-if="mensaje" class="feedback success">
             {{ mensaje }}
+
             <button type="button" @click="mensaje = ''">×</button>
         </div>
 
+        <div v-if="error" class="feedback error">
+            {{ error }}
+
+            <button type="button" @click="error = ''">×</button>
+        </div>
+
+        <!-- TABLA -->
+
         <section class="content-card">
+
             <div class="section-heading">
                 <div>
                     <h2>Pacientes en espera</h2>
-                    <p>Listado de pacientes que aceptaron esperar por una cancelación.</p>
+                    <p>Listado de pacientes que esperan por una cancelación.</p>
                 </div>
 
                 <span class="result-count">
@@ -232,50 +437,63 @@ function cancelarInscripcion(id: number) {
                 </span>
             </div>
 
-            <div class="table-wrapper">
+            <div v-if="cargando" class="empty-state">
+                Cargando información...
+            </div>
+
+            <div v-else class="table-wrapper">
+
                 <table>
                     <thead>
                         <tr>
                             <th>Paciente</th>
                             <th>DNI</th>
                             <th>Médico</th>
-                            <th>Especialidad</th>
                             <th>Fecha solicitada</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
 
                     <tbody>
+
                         <tr
                             v-for="registro in pacientesEnEspera"
                             :key="registro.id"
                         >
                             <td>
                                 <div class="patient-cell">
+
                                     <div class="avatar">
-                                        {{ obtenerPaciente(registro.idPaciente)?.nombre.charAt(0) }}
-                                        {{ obtenerPaciente(registro.idPaciente)?.apellido.charAt(0) }}
+                                        {{
+                                            obtenerPaciente(registro.idPaciente)?.nombre.charAt(0)
+                                        }}
+                                        {{
+                                            obtenerPaciente(registro.idPaciente)?.apellido.charAt(0)
+                                        }}
                                     </div>
 
                                     <strong>
-                                        {{ obtenerPaciente(registro.idPaciente)?.apellido }},
-                                        {{ obtenerPaciente(registro.idPaciente)?.nombre }}
+                                        {{
+                                            obtenerPaciente(registro.idPaciente)?.apellido
+                                            ?? "Paciente desconocido"
+                                        }},
+                                        {{
+                                            obtenerPaciente(registro.idPaciente)?.nombre
+                                            ?? `ID ${registro.idPaciente}`
+                                        }}
                                     </strong>
+
                                 </div>
                             </td>
 
                             <td>
-                                {{ obtenerPaciente(registro.idPaciente)?.dni }}
+                                {{ obtenerPaciente(registro.idPaciente)?.dni ?? "-" }}
                             </td>
 
                             <td>
                                 <strong class="doctor-name">
-                                    {{ obtenerMedico(registro.idMedico)?.nombre }}
+                                    Médico #{{ registro.idMedico }}
                                 </strong>
-                            </td>
-
-                            <td>
-                                {{ obtenerMedico(registro.idMedico)?.especialidad }}
                             </td>
 
                             <td>
@@ -286,30 +504,47 @@ function cancelarInscripcion(id: number) {
                                 <button
                                     type="button"
                                     class="cancel-button"
+                                    :disabled="cancelandoId === registro.id"
                                     @click="cancelarInscripcion(registro.id)"
                                 >
-                                    Cancelar
+                                    {{
+                                        cancelandoId === registro.id
+                                            ? "Cancelando..."
+                                            : "Cancelar"
+                                    }}
                                 </button>
                             </td>
                         </tr>
 
                         <tr v-if="pacientesEnEspera.length === 0">
-                            <td colspan="6" class="empty-state">
-                                <strong>No hay pacientes en lista de espera.</strong>
-                                <p>Podés agregar un paciente utilizando el botón superior.</p>
+                            <td colspan="5" class="empty-state">
+                                <strong>
+                                    No hay pacientes en lista de espera.
+                                </strong>
+
+                                <p>
+                                    Podés agregar un paciente utilizando el botón superior.
+                                </p>
                             </td>
                         </tr>
+
                     </tbody>
                 </table>
+
             </div>
+
         </section>
+
+        <!-- MODAL -->
 
         <div
             v-if="mostrarFormulario"
             class="modal-overlay"
-            @click.self="mostrarFormulario = false"
+            @click.self="cerrarFormulario"
         >
+
             <section class="modal">
+
                 <header class="modal-header">
                     <div>
                         <span class="eyebrow">ADMISIONES</span>
@@ -321,41 +556,55 @@ function cancelarInscripcion(id: number) {
                         type="button"
                         class="close-button"
                         aria-label="Cerrar"
-                        @click="mostrarFormulario = false"
+                        @click="cerrarFormulario"
                     >
                         ×
                     </button>
                 </header>
 
-                <form class="waitlist-form" @submit.prevent="agregarPaciente">
+                <form
+                    class="waitlist-form"
+                    @submit.prevent="agregarPaciente"
+                >
+
                     <label>
                         Paciente
-                        <select v-model.number="nuevoRegistro.idPaciente" required>
+
+                        <select
+                            v-model.number="nuevoRegistro.idPaciente"
+                            required
+                        >
                             <option
                                 v-for="paciente in pacientes"
                                 :key="paciente.id"
                                 :value="paciente.id"
                             >
-                                {{ paciente.apellido }}, {{ paciente.nombre }} — DNI {{ paciente.dni }}
+                                {{ paciente.apellido }}, {{ paciente.nombre }}
+                                — DNI {{ paciente.dni }}
                             </option>
                         </select>
                     </label>
 
                     <label>
-                        Médico
-                        <select v-model.number="nuevoRegistro.idMedico" required>
-                            <option
-                                v-for="medico in medicos"
-                                :key="medico.id"
-                                :value="medico.id"
-                            >
-                                {{ medico.nombre }} — {{ medico.especialidad }}
-                            </option>
-                        </select>
+                        ID del médico
+
+                        <input
+                            v-model.number="nuevoRegistro.idMedico"
+                            type="number"
+                            min="1"
+                            step="1"
+                            placeholder="Ingresá el ID del médico"
+                            required
+                        />
+
+                        <small>
+                            Utilizá el ID de un médico registrado en usuarios.
+                        </small>
                     </label>
 
                     <label>
                         Fecha solicitada
+
                         <input
                             v-model="nuevoRegistro.fechaSolicitada"
                             type="date"
@@ -364,24 +613,41 @@ function cancelarInscripcion(id: number) {
                         />
                     </label>
 
-                    <p v-if="error" class="feedback error">{{ error }}</p>
+                    <p v-if="errorFormulario" class="feedback error">
+                        {{ errorFormulario }}
+                    </p>
 
                     <footer class="modal-actions">
+
                         <button
                             type="button"
                             class="btn-secondary"
-                            @click="mostrarFormulario = false"
+                            @click="cerrarFormulario"
+                            :disabled="guardando"
                         >
                             Cancelar
                         </button>
 
-                        <button type="submit" class="btn-primary">
-                            Agregar a la lista
+                        <button
+                            type="submit"
+                            class="btn-primary"
+                            :disabled="guardando || pacientes.length === 0"
+                        >
+                            {{
+                                guardando
+                                    ? "Guardando..."
+                                    : "Agregar a la lista"
+                            }}
                         </button>
+
                     </footer>
+
                 </form>
+
             </section>
+
         </div>
+
     </section>
 </template>
 
@@ -401,6 +667,11 @@ select {
 
 button {
     cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
 }
 
 .page-header {
@@ -467,7 +738,8 @@ button {
     color: #18764f;
 }
 
-.feedback.success button {
+.feedback.success button,
+.feedback.error button {
     border: none;
     background: transparent;
     color: inherit;
@@ -581,6 +853,10 @@ tbody tr:last-child td {
     background: #fbdcdb;
 }
 
+.cancel-button:disabled {
+    background: #f5f5f5;
+}
+
 .empty-state {
     padding: 45px 15px;
     text-align: center;
@@ -667,6 +943,12 @@ tbody tr:last-child td {
     background: white;
     color: #344255;
     font-size: 13px;
+}
+
+.waitlist-form small {
+    color: #8491a1;
+    font-size: 11px;
+    font-weight: 400;
 }
 
 .modal-actions {

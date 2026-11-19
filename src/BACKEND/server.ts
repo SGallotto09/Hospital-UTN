@@ -115,6 +115,13 @@ import { RegistroPrestacionMySQLRepository } from "./modules/facturacion-adminis
 
 import { iniciarFacturacionMedicacion } from "./modules/facturacion-administracion/infraestructure/IniciarFacturacionMedicacion.js";
 
+import { MySQLListaEsperaRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLListaEsperaRepository.js";
+import { AgregarPacienteListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/AgregarPacienteListaEspera.js";
+import { ListaEsperaController } from "./modules/admicion-turnos/infraestructure/api/ListaEsperaController.js";
+import { ListaEsperaRoutes } from "./modules/admicion-turnos/infraestructure/api/ListaEsperaRoutes.js";
+import { ListarListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/ListarListaEspera.js";
+import { CancelarSolicitudListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/CancelarSolicitudListaEspera.js";
+
 // ==========================================
 // CONFIGURACIÓN GENERAL
 // ==========================================
@@ -392,6 +399,40 @@ const triajeRoutes = new TriajeRoutes(
 app.use(
     "/api/admisiones/triaje",
     triajeRoutes.obtenerRouter()
+);
+
+// ==========================================
+// MÓDULO DE LISTA DE ESPERA
+// ==========================================
+
+const listaEsperaRepository = new MySQLListaEsperaRepository();
+
+const agregarPacienteListaEspera = new AgregarPacienteListaEspera(
+    listaEsperaRepository,
+    pacienteRepository
+);
+
+const listarListaEspera = new ListarListaEspera(
+    listaEsperaRepository
+);
+
+const cancelarSolicitudListaEspera = new CancelarSolicitudListaEspera(
+    listaEsperaRepository
+);
+
+const listaEsperaController = new ListaEsperaController(
+    agregarPacienteListaEspera,
+    listarListaEspera,
+    cancelarSolicitudListaEspera
+);
+
+const listaEsperaRoutes = new ListaEsperaRoutes(
+    listaEsperaController
+);
+
+app.use(
+    "/api/admisiones/lista-espera",
+    listaEsperaRoutes.obtenerRouter()
 );
 
 // ==========================================
