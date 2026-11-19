@@ -18,6 +18,12 @@ interface Paciente {
     dni: string;
 }
 
+interface Medico {
+    id: number;
+    nombre: string;
+    apellido: string;
+}
+
 interface PacienteEnEspera {
     id: number;
     idPaciente: number;
@@ -32,6 +38,7 @@ interface PacienteEnEspera {
 // ==========================================
 
 const pacientes = ref<Paciente[]>([]);
+const medicos = ref<Medico[]>([]);
 const listaEspera = ref<PacienteEnEspera[]>([]);
 
 const cargando = ref(false);
@@ -63,10 +70,6 @@ const nuevoRegistro = reactive({
 // NORMALIZACIÓN DE DATOS
 // ==========================================
 
-// Las entidades del backend pueden serializar propiedades
-// privadas con "_" y los getters no aparecen en JSON.
-// Por eso contemplamos ambas representaciones.
-
 function obtenerPropiedad(
     objeto: Record<string, unknown>,
     ...nombres: string[]
@@ -84,10 +87,20 @@ function normalizarPaciente(datos: unknown): Paciente {
     const objeto = datos as Record<string, unknown>;
 
     return {
-        id: Number(obtenerPropiedad(objeto, "id")),
+        id: Number(obtenerPropiedad(objeto, "id", "_id")),
         nombre: String(obtenerPropiedad(objeto, "nombre", "_nombre") ?? ""),
         apellido: String(obtenerPropiedad(objeto, "apellido", "_apellido") ?? ""),
         dni: String(obtenerPropiedad(objeto, "dni", "_dni") ?? "")
+    };
+}
+
+function normalizarMedico(datos: unknown): Medico {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: Number(obtenerPropiedad(objeto, "id", "_id")),
+        nombre: String(obtenerPropiedad(objeto, "nombre", "_nombre") ?? ""),
+        apellido: String(obtenerPropiedad(objeto, "apellido", "_apellido") ?? "")
     };
 }
 
@@ -95,14 +108,26 @@ function normalizarSolicitud(datos: unknown): PacienteEnEspera {
     const objeto = datos as Record<string, unknown>;
 
     return {
-        id: Number(obtenerPropiedad(objeto, "id")),
-        idPaciente: Number(obtenerPropiedad(objeto, "idPaciente", "_idPaciente")),
-        idMedico: Number(obtenerPropiedad(objeto, "idMedico", "_idMedico")),
+        id: Number(obtenerPropiedad(objeto, "id", "_id")),
+        idPaciente: Number(
+            obtenerPropiedad(objeto, "idPaciente", "_idPaciente")
+        ),
+        idMedico: Number(
+            obtenerPropiedad(objeto, "idMedico", "_idMedico")
+        ),
         fechaSolicitada: String(
-            obtenerPropiedad(objeto, "fechaSolicitada", "_fechaSolicitada") ?? ""
+            obtenerPropiedad(
+                objeto,
+                "fechaSolicitada",
+                "_fechaSolicitada"
+            ) ?? ""
         ).slice(0, 10),
         fechaHoraIngreso: String(
-            obtenerPropiedad(objeto, "fechaHoraIngreso", "_fechaHoraIngreso") ?? ""
+            obtenerPropiedad(
+                objeto,
+                "fechaHoraIngreso",
+                "_fechaHoraIngreso"
+            ) ?? ""
         ),
         estado: String(
             obtenerPropiedad(objeto, "estado", "_estado") ?? "EN_ESPERA"
@@ -153,10 +178,33 @@ async function cargarPacientes(): Promise<void> {
     }>("/api/admisiones/pacientes");
 
     if (!Array.isArray(respuesta.pacientes)) {
-        throw new Error("La respuesta de pacientes no tiene el formato esperado.");
+        throw new Error(
+            "La respuesta de pacientes no tiene el formato esperado."
+        );
     }
 
     pacientes.value = respuesta.pacientes.map(normalizarPaciente);
+}
+
+// ==========================================
+// CARGAR MÉDICOS
+// ==========================================
+
+async function cargarMedicos(): Promise<void> {
+
+    const respuesta = await solicitarAPI<{
+        medicos: unknown[]
+    }>("/api/admisiones/medicos");
+
+    if (!Array.isArray(respuesta.medicos)) {
+        throw new Error(
+            "La respuesta de médicos no tiene el formato esperado."
+        );
+    }
+
+    medicos.value = respuesta.medicos
+        .map(normalizarMedico)
+        .filter(medico => medico.id > 0);
 }
 
 // ==========================================
@@ -170,7 +218,9 @@ async function cargarListaEspera(): Promise<void> {
     }>("/api/admisiones/lista-espera?estado=EN_ESPERA");
 
     if (!Array.isArray(respuesta.solicitudes)) {
-        throw new Error("La respuesta de la lista de espera no tiene el formato esperado.");
+        throw new Error(
+            "La respuesta de la lista de espera no tiene el formato esperado."
+        );
     }
 
     listaEspera.value = respuesta.solicitudes.map(normalizarSolicitud);
@@ -186,16 +236,27 @@ async function cargarDatos(): Promise<void> {
     error.value = "";
 
     try {
-        await Promise.all([
+
+        const resultados = await Promise.allSettled([
             cargarPacientes(),
+            cargarMedicos(),
             cargarListaEspera()
         ]);
 
-    } catch (err) {
+        const errores = resultados
+            .filter(
+                (resultado): resultado is PromiseRejectedResult =>
+                    resultado.status === "rejected"
+            )
+            .map(resultado =>
+                resultado.reason instanceof Error
+                    ? resultado.reason.message
+                    : "No se pudieron cargar algunos datos."
+            );
 
-        error.value = err instanceof Error
-            ? err.message
-            : "No se pudieron cargar los datos.";
+        if (errores.length > 0) {
+            error.value = errores.join(" ");
+        }
 
     } finally {
 
@@ -215,21 +276,38 @@ onMounted(() => {
 const pacientesEnEspera = computed(() =>
     [...listaEspera.value]
         .filter(registro => registro.estado === "EN_ESPERA")
-        .sort(
-            (a, b) =>
-                new Date(a.fechaHoraIngreso).getTime() -
-                new Date(b.fechaHoraIngreso).getTime()
-        )
+        .sort((a, b) => {
+            const fechaA = new Date(a.fechaHoraIngreso).getTime();
+            const fechaB = new Date(b.fechaHoraIngreso).getTime();
+
+            return fechaA - fechaB;
+        })
 );
 
 function obtenerPaciente(id: number): Paciente | undefined {
     return pacientes.value.find(paciente => paciente.id === id);
 }
 
+function obtenerMedico(id: number): Medico | undefined {
+    return medicos.value.find(medico => medico.id === id);
+}
+
+function nombreCompletoMedico(id: number): string {
+    const medico = obtenerMedico(id);
+
+    if (!medico) {
+        return `Médico #${id}`;
+    }
+
+    return `${medico.apellido}, ${medico.nombre}`;
+}
+
 function formatearFecha(fecha: string): string {
     if (!fecha) return "-";
 
     const partes = fecha.split("-");
+
+    if (partes.length !== 3) return fecha;
 
     return `${partes[2]}/${partes[1]}/${partes[0]}`;
 }
@@ -245,13 +323,15 @@ function abrirFormulario(): void {
     error.value = "";
 
     nuevoRegistro.idPaciente = pacientes.value[0]?.id ?? 0;
-    nuevoRegistro.idMedico = 0;
+    nuevoRegistro.idMedico = medicos.value[0]?.id ?? 0;
     nuevoRegistro.fechaSolicitada = fechaHoy;
 
     mostrarFormulario.value = true;
 }
 
 function cerrarFormulario(): void {
+    if (guardando.value) return;
+
     mostrarFormulario.value = false;
     errorFormulario.value = "";
 }
@@ -271,7 +351,7 @@ async function agregarPaciente(): Promise<void> {
     }
 
     if (!nuevoRegistro.idMedico || nuevoRegistro.idMedico <= 0) {
-        errorFormulario.value = "Ingresá un ID de médico válido.";
+        errorFormulario.value = "Seleccioná un médico válido.";
         return;
     }
 
@@ -281,7 +361,8 @@ async function agregarPaciente(): Promise<void> {
     }
 
     if (nuevoRegistro.fechaSolicitada < fechaHoy) {
-        errorFormulario.value = "La fecha solicitada no puede ser anterior a hoy.";
+        errorFormulario.value =
+            "La fecha solicitada no puede ser anterior a hoy.";
         return;
     }
 
@@ -291,6 +372,15 @@ async function agregarPaciente(): Promise<void> {
 
     if (!pacienteExiste) {
         errorFormulario.value = "El paciente seleccionado no existe.";
+        return;
+    }
+
+    const medicoExiste = medicos.value.some(
+        medico => medico.id === nuevoRegistro.idMedico
+    );
+
+    if (!medicoExiste) {
+        errorFormulario.value = "El médico seleccionado no existe.";
         return;
     }
 
@@ -310,9 +400,10 @@ async function agregarPaciente(): Promise<void> {
             }
         );
 
-        cerrarFormulario();
+        mostrarFormulario.value = false;
 
-        mensaje.value = "El paciente fue agregado correctamente a la lista de espera.";
+        mensaje.value =
+            "El paciente fue agregado correctamente a la lista de espera.";
 
         await cargarListaEspera();
 
@@ -368,7 +459,8 @@ async function cancelarInscripcion(id: number): Promise<void> {
             item => item.id !== id
         );
 
-        mensaje.value = "El paciente fue retirado de la lista de espera.";
+        mensaje.value =
+            "El paciente fue retirado de la lista de espera.";
 
     } catch (err) {
 
@@ -401,7 +493,11 @@ async function cancelarInscripcion(id: number): Promise<void> {
                 class="btn-primary"
                 type="button"
                 @click="abrirFormulario"
-                :disabled="cargando || pacientes.length === 0"
+                :disabled="
+                    cargando ||
+                    pacientes.length === 0 ||
+                    medicos.length === 0
+                "
             >
                 <span>＋</span>
                 Agregar paciente
@@ -492,7 +588,7 @@ async function cancelarInscripcion(id: number): Promise<void> {
 
                             <td>
                                 <strong class="doctor-name">
-                                    Médico #{{ registro.idMedico }}
+                                    {{ nombreCompletoMedico(registro.idMedico) }}
                                 </strong>
                             </td>
 
@@ -557,6 +653,7 @@ async function cancelarInscripcion(id: number): Promise<void> {
                         class="close-button"
                         aria-label="Cerrar"
                         @click="cerrarFormulario"
+                        :disabled="guardando"
                     >
                         ×
                     </button>
@@ -586,20 +683,20 @@ async function cancelarInscripcion(id: number): Promise<void> {
                     </label>
 
                     <label>
-                        ID del médico
+                        Médico
 
-                        <input
+                        <select
                             v-model.number="nuevoRegistro.idMedico"
-                            type="number"
-                            min="1"
-                            step="1"
-                            placeholder="Ingresá el ID del médico"
                             required
-                        />
-
-                        <small>
-                            Utilizá el ID de un médico registrado en usuarios.
-                        </small>
+                        >
+                            <option
+                                v-for="medico in medicos"
+                                :key="medico.id"
+                                :value="medico.id"
+                            >
+                                {{ medico.apellido }}, {{ medico.nombre }}
+                            </option>
+                        </select>
                     </label>
 
                     <label>
@@ -631,7 +728,11 @@ async function cancelarInscripcion(id: number): Promise<void> {
                         <button
                             type="submit"
                             class="btn-primary"
-                            :disabled="guardando || pacientes.length === 0"
+                            :disabled="
+                                guardando ||
+                                pacientes.length === 0 ||
+                                medicos.length === 0
+                            "
                         >
                             {{
                                 guardando
@@ -943,12 +1044,6 @@ tbody tr:last-child td {
     background: white;
     color: #344255;
     font-size: 13px;
-}
-
-.waitlist-form small {
-    color: #8491a1;
-    font-size: 11px;
-    font-weight: 400;
 }
 
 .modal-actions {
