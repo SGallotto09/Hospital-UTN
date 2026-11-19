@@ -4,7 +4,7 @@ import { verificarRol } from '../../../../IAM/infraestructure/middlewares/verifi
 
 const router: Router = Router();
 
-router.get('/', verificarRol(['Enfermero']), (req, res) =>
+router.get('/', verificarRol(['Administrador', 'Enfermero']), (req, res) =>
     dashboardController.obtener(req, res)
 );
 

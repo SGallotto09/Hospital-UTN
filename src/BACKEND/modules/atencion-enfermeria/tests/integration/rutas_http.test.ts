@@ -5,6 +5,8 @@ import administracionMedicacionRoutes from '../../infraestructure/api/administra
 import signoVitalRoutes from '../../infraestructure/api/signos-vitales/signo_vital_routes.js';
 import dashboardRoutes from '../../infraestructure/api/dashboard/dashboard_routes.js';
 import { verificarSesion } from '../../../IAM/infraestructure/middlewares/verificarSesion.js';
+import pacienteInternadoRoutes from '../../infraestructure/api/pacientes-internados/paciente_internado_routes.js';
+import protocoloRoutes from '../../infraestructure/api/protocolos/protocolo_atencion_routes.js';
 
 const mocks = vi.hoisted(() => ({
     administrar: vi.fn(async (req: Request, res: Response) =>
@@ -18,7 +20,11 @@ const mocks = vi.hoisted(() => ({
     obtenerTodas: vi.fn(async (_req: Request, res: Response) => res.status(200).json([])),
     registrar: vi.fn(async (req: Request, res: Response) =>
         res.status(201).json({ autor: req.session.usuarioId })),
-    obtenerDashboard: vi.fn(async (_req: Request, res: Response) => res.status(200).json([]))
+    obtenerDashboard: vi.fn(async (_req: Request, res: Response) => res.status(200).json([])),
+    obtenerPacientes: vi.fn(async (_req: Request, res: Response) => res.status(200).json([])),
+    obtenerProtocolos: vi.fn(async (_req: Request, res: Response) => res.status(200).json({ protocolos: [] })),
+    generarProtocolo: vi.fn(async (_req: Request, res: Response) => res.sendStatus(201)),
+    actualizarTarea: vi.fn(async (_req: Request, res: Response) => res.sendStatus(200)),
 }));
 
 vi.mock('../../infraestructure/api/administracion-medicacion/administracion_medicacion_dependencies.js', () => ({
@@ -36,6 +42,13 @@ vi.mock('../../infraestructure/api/signos-vitales/signo_vital_dependencies.js', 
 }));
 vi.mock('../../infraestructure/api/dashboard/dashboard_dependencies.js', () => ({
     dashboardController: { obtener: mocks.obtenerDashboard }
+}));
+vi.mock('../../infraestructure/api/pacientes-internados/paciente_internado_dependencies.js', () => ({
+    pacienteInternadoController: { obtenerTodos: mocks.obtenerPacientes }
+}));
+vi.mock('../../infraestructure/api/protocolos/protocolo_atencion_controlles.js', () => ({
+    protocolo_atencion_controller: { obtenerPorPaciente: mocks.obtenerProtocolos,
+        generar: mocks.generarProtocolo, actualizarEstadoTarea: mocks.actualizarTarea }
 }));
 
 let servidor: Server | undefined;
@@ -55,6 +68,8 @@ async function iniciarServidor() {
     app.use('/api/administracion-medicacion', administracionMedicacionRoutes);
     app.use('/api/signos-vitales', signoVitalRoutes);
     app.use('/api/dashboard', dashboardRoutes);
+    app.use('/api/pacientes-internados', pacienteInternadoRoutes);
+    app.use('/api/protocolos', protocoloRoutes);
 
     servidor = app.listen(0);
     await new Promise<void>(resolve => servidor?.once('listening', resolve));
@@ -70,6 +85,29 @@ afterEach(async () => {
 });
 
 describe('autorización HTTP de rutas de Enfermería', () => {
+    it.each([
+        ['/api/dashboard', ['Administrador', 'Enfermero']],
+        ['/api/pacientes-internados', ['Administrador', 'Médico', 'Enfermero']],
+        ['/api/protocolos/paciente/1', ['Administrador', 'Enfermero']],
+    ] as const)('%s respeta los roles de consulta de las pantallas y devuelve listas vacías', async (ruta, permitidos) => {
+        await iniciarServidor();
+        expect((await fetch(base_url + ruta)).status).toBe(401);
+        for (const rol of ['Administrador', 'Médico', 'Enfermero', 'Recepcionista', 'Limpieza']) {
+            const respuesta = await fetch(base_url + ruta, { headers: { 'x-test-user': '7', 'x-test-role': rol } });
+            if ((permitidos as readonly string[]).includes(rol)) {
+                expect(respuesta.status).toBe(200);
+                expect(await respuesta.json()).toEqual(ruta.startsWith('/api/protocolos') ? { protocolos: [] } : []);
+            } else expect(respuesta.status).toBe(403);
+        }
+    });
+    it('consultar protocolos como Administrador no habilita generación ni actualización de tareas', async () => {
+        await iniciarServidor();
+        const opciones = { headers: { 'Content-Type': 'application/json', 'x-test-user': '7', 'x-test-role': 'Administrador' }, body: '{}' };
+        expect((await fetch(base_url + '/api/protocolos', { ...opciones, method: 'POST' })).status).toBe(403);
+        expect((await fetch(base_url + '/api/protocolos/tareas/1', { ...opciones, method: 'PATCH' })).status).toBe(403);
+        expect(mocks.generarProtocolo).not.toHaveBeenCalled();
+        expect(mocks.actualizarTarea).not.toHaveBeenCalled();
+    });
     it('permite a Enfermería consultar medicación y reserva las opciones de alta a Médico', async () => {
         await iniciarServidor();
         const permisosEnfermero = await fetch(`${base_url}/api/administracion-medicacion/permisos`, {

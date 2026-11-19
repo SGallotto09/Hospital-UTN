@@ -10,6 +10,7 @@ import { ProcesarConsumoInsumo } from '../../application/use-cases/ProcesarConsu
 import { AdministracionMedicacionController } from '../../../atencion-enfermeria/infraestructure/api/administracion-medicacion/administracion_medicacion_controller.js'
 import { ObtenerMedicaciones } from '../../../atencion-enfermeria/use-cases/administracion-medicacion/obtener_medicaciones.js'
 import type { Request, Response } from 'express'
+import { event_bus } from '../../../../events/event_bus.js'
 
 // Componentes reales con conexiones programadas: no ejecuta escrituras en MySQL.
 const mocks = vi.hoisted(() => ({
@@ -56,7 +57,7 @@ afterEach(() => vi.useRealTimers())
 
 describe('Enfermería: administración y pendiente atómicos', () => {
   it('bloquea indicación y dosis, toma el piso activo e inserta todo sin descontar stock', async () => {
-    responder([indicacion], [], [{ piso: 2 }], { insertId: 20 }, { affectedRows: 1 })
+    responder([indicacion], [], [{ piso: 2 }], [{ stock: 50 }], { insertId: 20 }, { affectedRows: 1 })
     await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1)).resolves.toBe(20)
     const llamadas = mocks.conexion.execute.mock.calls
     expect(llamadas[0]?.[0]).toContain('FROM indicacion_medica WHERE id = ? FOR UPDATE')
@@ -64,9 +65,9 @@ describe('Enfermería: administración y pendiente atómicos', () => {
     expect(llamadas[1]?.[1]).toEqual([1, horario, horario])
     expect(llamadas[2]?.[0]).toContain('ac.fecha_egreso IS NULL')
     expect(llamadas[2]?.[0]).toContain('FOR UPDATE')
-    expect(llamadas[4]?.[0]).toContain('INSERT INTO consumos_medicacion')
-    expect(llamadas[4]?.[0]).toContain("'pendiente'")
-    expect(llamadas[4]?.[1]).toEqual([20, 4, 1, 2])
+    expect(llamadas[5]?.[0]).toContain('INSERT INTO consumos_medicacion')
+    expect(llamadas[5]?.[0]).toContain("'pendiente'")
+    expect(llamadas[5]?.[1]).toEqual([20, 4, 1, 2])
     expect(llamadas.some(([sql]) => /UPDATE\s+insumos/i.test(sql))).toBe(false)
     expect(mocks.pool.execute).not.toHaveBeenCalled()
     expect(mocks.conexion.beginTransaction).toHaveBeenCalledOnce()
@@ -85,10 +86,10 @@ describe('Enfermería: administración y pendiente atómicos', () => {
   })
 
   it('revierte si MySQL no devuelve un ID válido y no crea el consumo', async () => {
-    responder([indicacion], [], [{ piso: 2 }], { insertId: 0 })
+    responder([indicacion], [], [{ piso: 2 }], [{ stock: 50 }], { insertId: 0 })
     await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
       .rejects.toThrow('ID válido')
-    expect(mocks.conexion.execute).toHaveBeenCalledTimes(4)
+    expect(mocks.conexion.execute).toHaveBeenCalledTimes(5)
     expect(mocks.conexion.rollback).toHaveBeenCalledOnce()
     expect(mocks.conexion.commit).not.toHaveBeenCalled()
     expect(mocks.pool.execute).not.toHaveBeenCalled()
@@ -96,7 +97,7 @@ describe('Enfermería: administración y pendiente atómicos', () => {
 
   it.each(['administracion', 'consumo'])('revierte ambas inserciones si falla %s', async etapa => {
     const error = new Error('inserción fallida')
-    responder([indicacion], [], [{ piso: 2 }])
+    responder([indicacion], [], [{ piso: 2 }], [{ stock: 50 }])
     if (etapa === 'consumo') responder({ insertId: 20 })
     responder(error)
     await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario)).rejects.toBe(error)
@@ -160,15 +161,42 @@ describe('Enfermería: administración y pendiente atómicos', () => {
       existeDosisAdministrada: vi.fn().mockResolvedValue(false), administrar: vi.fn().mockResolvedValue(20),
     }
     const controller = new AdministracionMedicacionController(new ObtenerMedicaciones(repo), new AdministrarMedicacion(repo))
-    const req = { body: { id_indicacion_medica: 1, id_enfermero: 7, horario_programado: horario.toISOString(), cantidad_administrada: cantidad } } as Request
+    const req = { session: { usuarioId: 7, rol: 'Enfermero' }, body: { id_indicacion_medica: 1, id_enfermero: 999, horario_programado: horario.toISOString(), cantidad_administrada: cantidad } } as Request
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
     await controller.administrar(req, res)
     const valido = cantidad === undefined || cantidad === 1
-    expect(res.status).toHaveBeenCalledWith(valido ? 200 : 400)
+    expect(res.status).toHaveBeenCalledWith(valido ? 201 : 400)
     if (valido) {
       expect(repo.administrar).toHaveBeenCalledWith(1, 7, horario, horario, cantidad ?? indicacion.cantidad)
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ idAdministracionMedicacion: 20 }))
     } else expect(repo.administrar).not.toHaveBeenCalled()
+  })
+
+  it('rechaza al controlador sin sesión aunque el cuerpo declare un enfermero', async () => {
+    const repo = { obtenerTodas: vi.fn(), obtenerDatosIndicacion: vi.fn(), existeDosisAdministrada: vi.fn(), administrar: vi.fn() }
+    const controller = new AdministracionMedicacionController(new ObtenerMedicaciones(repo), new AdministrarMedicacion(repo))
+    const req = { body: { id_indicacion_medica: 1, id_enfermero: 7, horario_programado: horario.toISOString() } } as Request
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+    await controller.administrar(req, res)
+    expect(res.status).toHaveBeenCalledWith(401)
+    expect(repo.administrar).not.toHaveBeenCalled()
+    expect(repo.obtenerDatosIndicacion).not.toHaveBeenCalled()
+  })
+
+  it('no emite el aviso existente antes de confirmar administración y consumo', async () => {
+    mocks.pool.execute.mockResolvedValueOnce([[indicacion], []]).mockResolvedValueOnce([[], []])
+    responder([indicacion], [], [{ piso: 2 }], [{ stock: 50 }], { insertId: 20 }, { affectedRows: 1 })
+    let confirmar!: () => void
+    mocks.conexion.commit.mockReturnValue(new Promise<void>(resolve => { confirmar = resolve }))
+    const emitir = vi.spyOn(event_bus, 'emitir_medicacion_administrada')
+    try {
+      const operacion = new AdministrarMedicacion(new AdministracionMedicacionRepositoryMysq()).ejecutar(1, 7, horario)
+      await vi.waitFor(() => expect(mocks.conexion.commit).toHaveBeenCalledOnce())
+      expect(emitir).not.toHaveBeenCalled()
+      confirmar()
+      await expect(operacion).resolves.toBe(20)
+      expect(emitir).toHaveBeenCalledExactlyOnceWith({ idAdministracionMedicacion: 20, cantidadAdministrada: 1 })
+    } finally { emitir.mockRestore() }
   })
 })
 

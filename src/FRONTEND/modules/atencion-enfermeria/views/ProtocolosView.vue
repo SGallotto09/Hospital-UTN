@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import EnfermeriaNav from '../components/EnfermeriaNav.vue';
+import { rolActual } from '../../../../router/autenticacion';
 
 interface Paciente {
     id: number;
@@ -224,7 +225,7 @@ onMounted(cargar_pacientes);
             </select>
         </section>
 
-        <section class="selector-section">
+        <section v-if="rolActual === 'Enfermero'" class="selector-section">
             <label for="motivo">Motivo de ingreso</label>
 
             <select
@@ -307,6 +308,7 @@ onMounted(cargar_pacientes);
                         </div>
 
                         <button
+                            v-if="rolActual === 'Enfermero'"
                             type="button"
                             class="task-button"
                             :disabled="actualizando === tarea.id"

@@ -2,6 +2,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import EnfermeriaNav from "../components/EnfermeriaNav.vue";
+import { rolActual } from "../../../../router/autenticacion";
 
 interface PacienteDashboard {
     id: number;
@@ -236,6 +237,7 @@ onMounted(cargar_pacientes);
                 </div>
 
                 <button
+                    v-if="rolActual === 'Enfermero'"
                     class="primary-button"
                     @click="abrir_modal_control()"
                 >
@@ -471,6 +473,7 @@ onMounted(cargar_pacientes);
                     </button>
 
                     <button
+                        v-if="rolActual === 'Enfermero'"
                         class="primary-button"
                         @click="registrar_signos_del_paciente"
                     >

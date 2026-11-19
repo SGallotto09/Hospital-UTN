@@ -1,6 +1,7 @@
 
 import { Router, type RequestHandler } from "express";
 import { TriajeController } from "./TriajeController.js";
+import { verificarRol } from "../../../IAM/infraestructure/middlewares/verificarRol.js";
 
 export class TriajeRoutes {
     private readonly router = Router();
@@ -21,9 +22,9 @@ export class TriajeRoutes {
 
         this.router.use(verificarSesion);
 
-        this.router.get("/", this.controller.listar);
-        this.router.post("/", this.controller.registrar);
-        this.router.patch("/:id/estado", this.controller.actualizarEstado);
+        this.router.get("/", verificarRol(["Administrador", "Enfermero", "Recepcionista"]), this.controller.listar);
+        this.router.post("/", verificarRol(["Administrador", "Enfermero"]), this.controller.registrar);
+        this.router.patch("/:id/estado", verificarRol(["Administrador", "Enfermero"]), this.controller.actualizarEstado);
     }
 
     obtenerRouter() {

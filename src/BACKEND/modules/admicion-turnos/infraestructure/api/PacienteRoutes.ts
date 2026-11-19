@@ -4,6 +4,7 @@ import { Router } from "express";
 import type { PacienteController } from "./PacienteController.js";
 
 import { verificarSesion } from "../../../IAM/infraestructure/middlewares/verificarSesion.js";
+import { verificarRol } from "../../../IAM/infraestructure/middlewares/verificarRol.js";
 
 
 export class PacienteRoutes {
@@ -26,6 +27,7 @@ export class PacienteRoutes {
         this.router.get(
             "/",
             verificarSesion,
+            verificarRol(["Administrador", "Recepcionista", "Médico", "Enfermero"]),
             (req, res) => this.pacienteController.listar(req, res)
         );
 
@@ -34,6 +36,7 @@ export class PacienteRoutes {
         this.router.post(
             "/",
             verificarSesion,
+            verificarRol(["Administrador", "Recepcionista"]),
             (req, res) => this.pacienteController.registrar(req, res)
         );
 

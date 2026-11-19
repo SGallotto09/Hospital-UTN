@@ -48,14 +48,14 @@ const router = createRouter({
                 {
                     path: "enfermeria/signos-vitales",
                     name: "enfermeria-signos-vitales",
-                    meta: { roles: ["Administrador", "Enfermero"] },
+                    meta: { roles: ["Enfermero"] },
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/SignosVitalesView.vue")
                 },
                 {
                     path: "enfermeria/medicacion",
                     name: "enfermeria-medicacion",
-                    meta: { roles: ["Administrador", "Enfermero"] },
+                    meta: { roles: ["Médico", "Enfermero"] },
                     component: () =>
                         import("@/FRONTEND/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },

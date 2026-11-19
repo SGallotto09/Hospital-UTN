@@ -2,6 +2,7 @@
 import { Router, type RequestHandler } from "express";
 
 import { ListaEsperaController } from "./ListaEsperaController.js";
+import { verificarRol } from "../../../IAM/infraestructure/middlewares/verificarRol.js";
 
 export class ListaEsperaRoutes {
 
@@ -30,6 +31,7 @@ export class ListaEsperaRoutes {
         };
 
         this.router.use(verificarSesion);
+        this.router.use(verificarRol(["Administrador", "Recepcionista"]));
 
         this.router.get(
             "/",

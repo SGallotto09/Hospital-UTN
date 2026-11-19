@@ -2,6 +2,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted } from "vue";
+import { rolActual } from "../../../../router/autenticacion";
 
 interface DosisProgramada {
     id_indicacion_medica: number;
@@ -256,8 +257,8 @@ onMounted(cargarMedicaciones);
 
 <template>
     <div class="page">
-        <RouterLink to="/enfermeria" class="back-button">
-            ← Volver al panel
+        <RouterLink :to="rolActual === 'Médico' ? '/enfermeria/pacientes' : '/enfermeria'" class="back-button">
+            ← Volver a {{ rolActual === 'Médico' ? 'pacientes internados' : 'panel' }}
         </RouterLink>
 
         <header class="page-header">

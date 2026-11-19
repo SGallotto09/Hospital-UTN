@@ -13,7 +13,7 @@ router.post(
 
 router.get(
     '/paciente/:idPaciente',
-    verificarRol(['Enfermero']),
+    verificarRol(['Administrador', 'Enfermero']),
     (req, res) => protocolo_atencion_controller.obtenerPorPaciente(req, res)
 );
 

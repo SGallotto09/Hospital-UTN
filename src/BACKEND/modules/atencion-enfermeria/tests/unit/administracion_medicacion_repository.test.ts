@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdministracionMedicacionRepositoryMysq } from '../../infraestructure/repositories/administracion_medicacion_repository_mysql.js';
 
-const mocks = vi.hoisted(() => ({ execute: vi.fn() }));
-vi.mock('mysql2/promise', () => ({ default: { createPool: () => ({ execute: mocks.execute }) } }));
+const mocks = vi.hoisted(() => {
+    const execute = vi.fn();
+    return { execute, getConnection: vi.fn(), conexion: { execute, beginTransaction: vi.fn(), commit: vi.fn(), rollback: vi.fn(), release: vi.fn(), destroy: vi.fn() } };
+});
+vi.mock('mysql2/promise', () => ({ default: { createPool: () => ({ execute: mocks.execute, getConnection: mocks.getConnection }) } }));
 
 const horario = new Date('2026-11-16T10:00:00');
 function responder(...filas: unknown[]) {
@@ -12,8 +15,8 @@ function responder(...filas: unknown[]) {
     }
 }
 
-beforeEach(() => vi.resetAllMocks());
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(horario); mocks.getConnection.mockResolvedValue(mocks.conexion); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 describe('persistencia de administración de medicación', () => {
     it('crea una indicación usando el médico de sesión y valida paciente e insumo', async () => {
@@ -45,7 +48,7 @@ describe('persistencia de administración de medicación', () => {
     });
 
     it('registra el consumo pendiente sin descontar stock; Recursos-Camas procesa el descuento', async () => {
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, { affectedRows: 1 });
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, { affectedRows: 1 });
         const id = await new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1);
 
         expect(id).toBe(25);
@@ -57,7 +60,7 @@ describe('persistencia de administración de medicación', () => {
     });
 
     it('rechaza stock insuficiente antes de guardar la administración', async () => {
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 0 }]);
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 0 }]);
         await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
             .rejects.toMatchObject({ estado_http: 409 });
         expect(mocks.execute).toHaveBeenCalledTimes(4);
@@ -65,45 +68,48 @@ describe('persistencia de administración de medicación', () => {
 
     it('propaga el fallo al guardar la administración sin crear consumo', async () => {
         const fallo = new Error('falló insert en administración');
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], fallo);
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 5 }], fallo);
         await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
             .rejects.toBe(fallo);
         expect(mocks.execute).toHaveBeenCalledTimes(5);
     });
 
-    it('conserva la administración si el consumo no aparece tras el error de INSERT', async () => {
+    it('revierte administración y consumo si falla el INSERT del pendiente', async () => {
         const fallo = new Error('falló insert en consumos');
-        const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, fallo, []);
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, fallo);
 
         await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
             .rejects.toBe(fallo);
-        expect(mocks.execute.mock.calls[6]?.[0]).toContain('SELECT id_insumo, cantidad, piso');
+        expect(mocks.execute).toHaveBeenCalledTimes(6);
+        expect(mocks.conexion.rollback).toHaveBeenCalledOnce();
+        expect(mocks.conexion.commit).not.toHaveBeenCalled();
         expect(mocks.execute.mock.calls.some(([sql]) => /DELETE FROM administracion_medicacion/i.test(String(sql)))).toBe(false);
-        log.mockRestore();
     });
 
-    it('trata como éxito un INSERT con respuesta perdida si encuentra el consumo esperado', async () => {
+    it('no anuncia éxito si falla la confirmación de la transacción', async () => {
         const fallo = new Error('se perdió la respuesta de MySQL');
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, fallo, [{ id_insumo: 4, cantidad: 1, piso: 2 }]);
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, { affectedRows: 1 });
+        mocks.conexion.commit.mockRejectedValueOnce(fallo);
 
         await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
-            .resolves.toBe(25);
-        expect(mocks.execute).toHaveBeenCalledTimes(7);
+            .rejects.toBe(fallo);
+        expect(mocks.execute).toHaveBeenCalledTimes(6);
+        expect(mocks.conexion.rollback).toHaveBeenCalledOnce();
         expect(mocks.execute.mock.calls.some(([sql]) => /DELETE FROM administracion_medicacion/i.test(String(sql)))).toBe(false);
     });
 
-    it('conserva la administración si no se puede determinar el estado del consumo', async () => {
+    it('descarta la conexión si también falla el rollback', async () => {
         const falloInsert = new Error('falló insert en consumos');
-        const falloLectura = new Error('falló la lectura de confirmación');
-        const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        responder([], [{ id_insumo: 4, cantidad: 1, id_paciente: 8 }], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, falloInsert, falloLectura);
+        const falloRollback = new Error('falló rollback');
+        responder([{ id_insumo: 4, cantidad: 1, id_paciente: 8, fecha: '2026-11-16', hora_inicio: '10:00:00', frecuencia_horas: 8 }], [], [{ piso: 2 }], [{ stock: 5 }], { insertId: 25 }, falloInsert);
+        mocks.conexion.rollback.mockRejectedValueOnce(falloRollback);
 
         await expect(new AdministracionMedicacionRepositoryMysq().administrar(1, 7, horario, horario, 1))
-            .rejects.toBe(falloInsert);
-        expect(mocks.execute).toHaveBeenCalledTimes(7);
+            .rejects.toBeInstanceOf(AggregateError);
+        expect(mocks.execute).toHaveBeenCalledTimes(6);
+        expect(mocks.conexion.destroy).toHaveBeenCalledOnce();
+        expect(mocks.conexion.release).not.toHaveBeenCalled();
         expect(mocks.execute.mock.calls.some(([sql]) => /DELETE FROM administracion_medicacion/i.test(String(sql)))).toBe(false);
-        log.mockRestore();
     });
 
     it('detecta administraciones sin consumo sin interrumpir el listado', async () => {

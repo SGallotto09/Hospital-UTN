@@ -29,12 +29,12 @@ const enlaces: Enlace[] = [
     {
         nombre: "Signos vitales",
         ruta: "/enfermeria/signos-vitales",
-        roles: ["Administrador", "Enfermero"]
+        roles: ["Enfermero"]
     },
     {
         nombre: "Medicación",
         ruta: "/enfermeria/medicacion",
-        roles: ["Administrador", "Enfermero"]
+        roles: ["Médico", "Enfermero"]
     },
     {
         nombre: "Protocolos",
