@@ -1,11 +1,27 @@
 import { Database } from '../../../../database/connectionDB.js';
 import type { SignoVitalRepository } from '../../domain/repositories/signo_vital_repository.js';
 import type { SignoVital } from '../../domain/entities/signos_vitales.js';
+import { ErrorEnfermeria } from '../../domain/errors/error_enfermeria.js';
 
 export class SignoVitalRepositoryMySQL implements SignoVitalRepository{
     private readonly db = Database.getInstance();
 
     async guardar(datos: Omit<SignoVital, 'id' | 'fecha_hora'>): Promise<SignoVital>{
+        const [asignaciones] = await this.db.query(
+            `SELECT id
+             FROM asignaciones_camas
+             WHERE id_paciente = ? AND fecha_egreso IS NULL
+             LIMIT 2`,
+            [datos.id_paciente]
+        );
+        const asignaciones_activas = asignaciones as { id: number }[];
+        if (asignaciones_activas.length === 0) {
+            throw new ErrorEnfermeria('El paciente no tiene una internación activa', 404);
+        }
+        if (asignaciones_activas.length !== 1) {
+            throw new ErrorEnfermeria('El paciente tiene más de una internación activa', 409);
+        }
+
         const resultado = await this.db.query(
             `INSERT INTO signos_vitales
                 (id_paciente, id_enfermero, presion_arterial, frecuencia_cardiaca, temperatura)

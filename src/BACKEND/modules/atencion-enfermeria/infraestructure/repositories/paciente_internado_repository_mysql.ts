@@ -23,15 +23,15 @@ export class PacienteInternadoRepositoryMysql implements PacienteInternadoReposi
             INNER JOIN camas c
                 ON ac.id_cama = c.id
 
-            LEFT JOIN (
-                SELECT id_paciente, MAX(id) AS ultimo_id
-                FROM signos_vitales
-                GROUP BY id_paciente
-            ) sv_ultimo
-                ON sv_ultimo.id_paciente = p.id
-
             LEFT JOIN signos_vitales sv
-                ON sv.id = sv_ultimo.ultimo_id
+                ON sv.id = (
+                    SELECT sv_ultimo.id
+                    FROM signos_vitales sv_ultimo
+                    WHERE sv_ultimo.id_paciente = p.id
+                        AND sv_ultimo.fecha_hora >= ac.fecha_ingreso
+                    ORDER BY sv_ultimo.fecha_hora DESC, sv_ultimo.id DESC
+                    LIMIT 1
+                )
 
             WHERE ac.fecha_egreso IS NULL
 

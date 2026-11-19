@@ -257,9 +257,9 @@ onMounted(cargar_pacientes);
                     </p>
                 </div>
 
-                <span class="alert-button">
+                <RouterLink to="/enfermeria/alertas" class="alert-button">
                     Revisá los pacientes señalados
-                </span>
+                </RouterLink>
             </section>
 
             <div
@@ -391,7 +391,6 @@ onMounted(cargar_pacientes);
             </section>
         </main>
 
-        <!-- MODAL DEL PACIENTE -->
         <div
             v-if="paciente_seleccionado"
             class="modal-overlay"
@@ -481,7 +480,6 @@ onMounted(cargar_pacientes);
             </div>
         </div>
 
-        <!-- MODAL REGISTRAR CONTROL -->
         <div
             v-if="mostrar_modal_control"
             class="modal-overlay"
@@ -616,7 +614,6 @@ onMounted(cargar_pacientes);
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* HEADER */
 .topbar {
     min-height: 120px;
     padding: 28px 42px;
@@ -666,7 +663,6 @@ onMounted(cargar_pacientes);
     background: #20bf6b;
 }
 
-/* CONTENIDO */
 .content {
     width: 100%;
     max-width: 1500px;
@@ -674,7 +670,6 @@ onMounted(cargar_pacientes);
     padding: 32px 42px;
 }
 
-/* RESUMEN */
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -730,7 +725,6 @@ onMounted(cargar_pacientes);
     color: #d53d3d;
 }
 
-/* SECCIÓN PACIENTES */
 .section-header {
     display: flex;
     align-items: center;
@@ -778,7 +772,6 @@ onMounted(cargar_pacientes);
     cursor: not-allowed;
 }
 
-/* ALERTA GENERAL */
 .alert-banner {
     display: flex;
     align-items: center;
@@ -826,9 +819,9 @@ onMounted(cargar_pacientes);
     background: #ffffff;
     color: #c23939;
     font-size: 10px;
+    text-decoration: none;
 }
 
-/* PACIENTES */
 .patients-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -848,7 +841,6 @@ onMounted(cargar_pacientes);
     box-shadow: 0 3px 15px rgba(211, 62, 62, 0.08);
 }
 
-/* CABECERA PACIENTE */
 .patient-header {
     display: flex;
     align-items: center;
@@ -900,7 +892,6 @@ onMounted(cargar_pacientes);
     font-size: 15px;
 }
 
-/* ALERTA PACIENTE */
 .patient-alert {
     display: flex;
     align-items: center;
@@ -936,7 +927,6 @@ onMounted(cargar_pacientes);
     font-size: 9px;
 }
 
-/* SIGNOS VITALES */
 .vitals {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -999,7 +989,6 @@ onMounted(cargar_pacientes);
     color: #d63838 !important;
 }
 
-/* FOOTER PACIENTE */
 .patient-footer {
     display: flex;
     align-items: center;
@@ -1031,7 +1020,6 @@ onMounted(cargar_pacientes);
     color: #056da8;
 }
 
-/* ESTADOS */
 .empty-state {
     padding: 30px;
     text-align: center;
@@ -1042,7 +1030,6 @@ onMounted(cargar_pacientes);
     font-size: 12px;
 }
 
-/* MODALES */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -1173,7 +1160,6 @@ onMounted(cargar_pacientes);
     cursor: pointer;
 }
 
-/* FORMULARIO */
 .control-modal-header {
     padding-bottom: 20px;
 }
@@ -1252,7 +1238,6 @@ onMounted(cargar_pacientes);
     border-top: 1px solid #e8eef4;
 }
 
-/* RESPONSIVE */
 @media (max-width: 1100px) {
     .patients-grid {
         grid-template-columns: 1fr;

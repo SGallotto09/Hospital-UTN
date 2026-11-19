@@ -24,6 +24,7 @@ export class ObtenerMedicaciones {
 
             if (
                 Number.isNaN(inicio.getTime()) ||
+                !Number.isSafeInteger(indicacion.frecuencia_horas) ||
                 indicacion.frecuencia_horas <= 0
             ) {
                 continue;
@@ -54,6 +55,18 @@ export class ObtenerMedicaciones {
 
                 horario = new Date(horario.getTime() + intervalo);
             }
+
+            dosisProgramadas.push({
+                id_indicacion_medica: indicacion.id_indicacion_medica,
+                id_paciente: indicacion.id_paciente,
+                nombre: indicacion.nombre,
+                apellido: indicacion.apellido,
+                habitacion: indicacion.habitacion,
+                medicamento: indicacion.medicamento,
+                cantidad: indicacion.cantidad,
+                horario_programado: new Date(horario),
+                estado: 'Futura'
+            });
         }
 
         return dosisProgramadas;

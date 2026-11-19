@@ -8,5 +8,5 @@ export interface DosisProgramada {
     medicamento: string;
     cantidad: number;
     horario_programado: Date;
-    estado: 'Pendiente' | 'Administrada';
+    estado: 'Futura' | 'Pendiente' | 'Administrada';
 }

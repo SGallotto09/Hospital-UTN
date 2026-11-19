@@ -27,6 +27,7 @@ export class DashboardRepositoryMySQL implements DashboardRepository {
                     SELECT sv2.id
                     FROM signos_vitales sv2
                     WHERE sv2.id_paciente = p.id
+                        AND sv2.fecha_hora >= ac.fecha_ingreso
                     ORDER BY sv2.fecha_hora DESC, sv2.id DESC
                     LIMIT 1
                 )

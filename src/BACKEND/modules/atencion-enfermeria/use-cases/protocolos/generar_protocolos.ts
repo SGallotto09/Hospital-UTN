@@ -5,6 +5,7 @@ import type { ProtocoloAtencionRepository } from '../../domain/repositories/prot
 
 import { PreOpProtocolBuilder } from '../../domain/builders/pre_op_protocol_builder.js';
 import { RespiratoryProtocolBuilder } from '../../domain/builders/respiratory_protocol_builder.js';
+import { ErrorEnfermeria } from '../../domain/errors/error_enfermeria.js';
 
 export type MotivoIngreso = 'Prequirurgico' | 'Neumonia';
 
@@ -19,7 +20,7 @@ export class GenerarProtocolo {
     ): Promise<ProtocoloAtencion> {
 
         if (!Number.isSafeInteger(id_paciente) || id_paciente <= 0) {
-            throw new Error('El ID del paciente no es válido.');
+            throw new ErrorEnfermeria('El ID del paciente no es válido.', 400);
         }
 
         let builder: ProtocoloBuilder;
@@ -34,7 +35,7 @@ export class GenerarProtocolo {
                 break;
 
             default:
-                throw new Error('El motivo de ingreso no tiene un protocolo configurado.');
+                throw new ErrorEnfermeria('El motivo de ingreso no tiene un protocolo configurado.', 400);
         }
 
         builder.reiniciar(id_paciente);
