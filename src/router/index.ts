@@ -61,13 +61,6 @@ const router = createRouter({
                 },
 
                 {
-                    path: "enfermeria/pacientes",
-                    name: "enfermeria-pacientes",
-                    component: () =>
-                        import("@/FRONTEND/modules/atencion-enfermeria/views/PacientesInternadosView.vue")
-                },
-
-                {
                     path: "historia-clinica",
                     alias: "/historia_clinica",
                     meta: {
@@ -76,20 +69,6 @@ const router = createRouter({
                     name: "historia_clinica",
                     component: () =>
                         import("../FRONTEND/modules/historia_clinica/views/historia_clinica_view.vue")
-                },
-
-                {
-                    path: "enfermeria/signos-vitales",
-                    name: "enfermeria-signos-vitales",
-                    component: () =>
-                        import("@/FRONTEND/modules/atencion-enfermeria/views/SignosVitalesView.vue")
-                },
-
-                {
-                    path: "enfermeria/medicacion",
-                    name: "enfermeria-medicacion",
-                    component: () =>
-                        import("@/FRONTEND/modules/atencion-enfermeria/views/MedicacionView.vue")
                 },
 
                 // ADMINISTRACIÓN DE USUARIOS

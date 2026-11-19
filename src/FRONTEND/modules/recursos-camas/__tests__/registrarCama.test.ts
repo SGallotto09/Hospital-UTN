@@ -1,7 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { rolActual } from '../../../../router/autenticacion'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import { crearCamasApi, ErrorCamasApi, type CamasApi, type Cama } from '../services/recursosCamasApi'
+
+beforeEach(() => { rolActual.value = 'Administrador' })
+afterEach(() => { rolActual.value = null })
 
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 describe('Nueva cama desde el mapa', () => {

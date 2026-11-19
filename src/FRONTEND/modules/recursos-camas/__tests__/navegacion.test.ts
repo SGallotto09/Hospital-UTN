@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it } from 'vitest'
+import { rolActual } from '../../../../router/autenticacion'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import RecursosCamasNav from '../components/RecursosCamasNav.vue'
 import routerAplicacion from '../../../../router/index'
+
+beforeEach(() => { rolActual.value = 'Administrador' })
+afterEach(() => { rolActual.value = null })
 
 async function montarNavegacion(path: string) {
   const rutas = routerAplicacion

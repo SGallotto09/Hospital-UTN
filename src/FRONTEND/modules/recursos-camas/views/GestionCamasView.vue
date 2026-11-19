@@ -5,6 +5,7 @@ import AsignarCamaForm from '../components/AsignarCamaForm.vue'
 import TransicionCamaForm from '../components/TransicionCamaForm.vue'
 import RecursosCamasNav from '../components/RecursosCamasNav.vue'
 import { crearCamasApi, ErrorCamasApi } from '../services/recursosCamasApi'
+import { permisosCamas } from '../services/permisosCamas'
 import type {
   Cama,
   CamasApi,
@@ -156,7 +157,7 @@ onMounted(cargar)
         <p>Disponibilidad, asignación y preparación de las camas del hospital.</p>
       </div>
       <div class="header-actions">
-      <button class="primary-button" :disabled="cargando || enviando || cargandoTipos || !mapaVigente" @click="abrirAlta">
+      <button v-if="permisosCamas.crear" class="primary-button" :disabled="cargando || enviando || cargandoTipos || !mapaVigente" @click="abrirAlta">
         + Nueva cama
       </button>
       <button class="primary-button" :disabled="cargando || enviando || cargandoTipos" @click="actualizar">
@@ -168,7 +169,7 @@ onMounted(cargar)
       <p v-if="error" role="alert" class="message error">{{ error }}</p>
       <p v-if="aviso" role="status" class="message exito">{{ aviso }}</p>
       <p v-if="cargandoTipos" role="status">Cargando tipos de cama…</p>
-      <form v-if="mostrarAlta" class="alta-cama" aria-label="Nueva cama" @submit.prevent="registrar">
+      <form v-if="mostrarAlta && permisosCamas.crear" class="alta-cama" aria-label="Nueva cama" @submit.prevent="registrar">
         <h2>Nueva cama</h2>
         <p>Se registrará Libre, sin paciente asignado.</p>
         <fieldset :disabled="enviando || !mapaVigente">
@@ -212,7 +213,7 @@ onMounted(cargar)
       </div>
       <p v-if="cargando" role="status" class="loading">Cargando camas…</p>
       <AsignarCamaForm
-        v-if="seleccion && seleccion.accion === 'asignar'"
+        v-if="seleccion && seleccion.accion === 'asignar' && permisosCamas.asignar"
         :key="seleccion.cama.id"
         :cama="seleccion.cama"
         :enviando="enviando"
@@ -221,7 +222,7 @@ onMounted(cargar)
         @cancelar="seleccion = null"
       />
       <TransicionCamaForm
-        v-if="seleccion && seleccion.accion !== 'asignar'"
+        v-if="seleccion && seleccion.accion !== 'asignar' && (seleccion.accion === 'liberar' ? permisosCamas.liberar : seleccion.accion === 'confirmar-limpieza' ? permisosCamas.limpiar : permisosCamas.mantener)"
         :key="`${seleccion.cama.id}-${seleccion.accion}`"
         :cama="seleccion.cama"
         :accion="seleccion.accion"

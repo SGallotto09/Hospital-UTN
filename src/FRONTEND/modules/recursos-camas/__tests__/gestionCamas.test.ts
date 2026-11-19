@@ -1,11 +1,15 @@
+import { rolActual } from '../../../../router/autenticacion'
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import AsignarCamaForm from '../components/AsignarCamaForm.vue'
 import TransicionCamaForm from '../components/TransicionCamaForm.vue'
 import { crearCamasApi, ErrorCamasApi } from '../services/recursosCamasApi'
 import type { Cama, CamasApi } from '../services/recursosCamasApi'
+
+beforeEach(() => { rolActual.value = 'Administrador' })
+afterEach(() => { rolActual.value = null })
 
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 

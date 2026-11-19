@@ -46,6 +46,21 @@ describe('Router real: sesión IAM y autorización', () => {
         await router.push('/login'); await router.push('/login?motivo=sesion');
         expect(fetchMock).not.toHaveBeenCalled();
     });
+    it('Limpieza accede al mapa de camas con la sesión IAM', async () => {
+        fetchMock.mockImplementation(async () => sesion('Limpieza'));
+        await router.push('/recursos-camas');
+        expect(router.currentRoute.value.path).toBe('/recursos-camas');
+        expect(accesoVerificado.value).toBe(true);
+    });
+    it.each(['/usuarios/registro', '/historia-clinica', '/facturacion', '/recursos-camas/inventario',
+        '/enfermeria', '/enfermeria/pacientes', '/enfermeria/signos-vitales', '/enfermeria/medicacion',
+        '/enfermeria/protocolos', '/admisiones/dashboard', '/admisiones/agenda', '/admisiones/triaje',
+    ])('Limpieza no accede directamente a %s', async ruta => {
+        fetchMock.mockImplementation(async () => sesion('Limpieza'));
+        await router.push(ruta);
+        expect(router.currentRoute.value.path).toBe('/login');
+        expect(router.currentRoute.value.query.motivo).toBe('permiso');
+    });
     it('un usuario autenticado accede a Historia Clínica usando cookies, sin caché', async () => {
         await router.push('/historia-clinica');
         expect(router.currentRoute.value.path).toBe('/historia-clinica');

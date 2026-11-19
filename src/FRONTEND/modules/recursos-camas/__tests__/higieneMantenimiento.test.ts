@@ -1,5 +1,6 @@
+import { rolActual } from '../../../../router/autenticacion'
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import GestionCamasView from '../views/GestionCamasView.vue'
 import CamaCard from '../components/CamaCard.vue'
@@ -23,6 +24,9 @@ const cama: Cama = {
   disponible: false,
   idAsignacionActiva: 50,
 }
+
+beforeEach(() => { rolActual.value = 'Administrador' })
+afterEach(() => { rolActual.value = null })
 
 vi.mock('../components/RecursosCamasNav.vue', () => ({ default: { template: '<nav />' } }))
 const resultado: ResultadoTransicion = {
