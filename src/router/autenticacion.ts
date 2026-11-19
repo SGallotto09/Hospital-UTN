@@ -3,11 +3,13 @@ import type { Router, RouteLocationNormalized } from 'vue-router';
 
 // Sólo controla la presentación durante la verificación. Nunca acredita una sesión.
 export const accesoVerificado = ref(false);
+export const rolActual = ref<string | null>(null);
 let revision = 0;
 
 export function invalidarAcceso(): void {
     revision++;
     accesoVerificado.value = false;
+    rolActual.value = null;
 }
 
 interface Sesion {
@@ -38,7 +40,10 @@ export function protegerRutas(router: Router): () => void {
         const actual = ++revision;
         accesoVerificado.value = false;
         clearTimeout(temporizador);
-        if (ruta.path === '/login') return true;
+        if (ruta.path === '/login') {
+            rolActual.value = null;
+            return true;
+        }
         try {
             // Se comparte únicamente la solicitud en curso; no se conserva un resultado anterior.
             const solicitud = enCurso ??= consultarSesion();
@@ -56,7 +61,9 @@ export function protegerRutas(router: Router): () => void {
                 if (restante <= 0) return { path: '/login', query: { motivo: 'sesion' } };
                 temporizador = setTimeout(() => { void revalidar(); }, Math.min(restante, 2147483647));
             }
+            rolActual.value = sesion.usuario.rol;
             accesoVerificado.value = true;
+
             return true;
         } catch {
             if (actual !== revision) return false;

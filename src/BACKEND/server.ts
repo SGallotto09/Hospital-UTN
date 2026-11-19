@@ -122,6 +122,11 @@ import { ListaEsperaRoutes } from "./modules/admicion-turnos/infraestructure/api
 import { ListarListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/ListarListaEspera.js";
 import { CancelarSolicitudListaEspera } from "./modules/admicion-turnos/application/use-cases/lista-espera/CancelarSolicitudListaEspera.js";
 
+import { MySQLMedicoRepository } from "./modules/admicion-turnos/infraestructure/repositories/MySQLMedicoRepository.js";
+import { ListarMedicos } from "./modules/admicion-turnos/application/use-cases/medicos/ListarMedicos.js";
+import { MedicoController } from "./modules/admicion-turnos/infraestructure/api/MedicoController.js";
+import { MedicoRoutes } from "./modules/admicion-turnos/infraestructure/api/MedicoRoutes.js";
+
 // ==========================================
 // CONFIGURACIÓN GENERAL
 // ==========================================
@@ -302,6 +307,29 @@ const pacienteRoutes = new PacienteRoutes(
 app.use(
     "/api/admisiones/pacientes",
     pacienteRoutes.obtenerRouter()
+);
+
+// ==========================================
+// MÓDULO DE MÉDICOS
+// ==========================================
+
+const medicoRepository = new MySQLMedicoRepository();
+
+const listarMedicos = new ListarMedicos(
+    medicoRepository
+);
+
+const medicoController = new MedicoController(
+    listarMedicos
+);
+
+const medicoRoutes = new MedicoRoutes(
+    medicoController
+);
+
+app.use(
+    "/api/admisiones/medicos",
+    medicoRoutes.obtenerRouter()
 );
 
 // ==========================================
