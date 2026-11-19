@@ -1,49 +1,45 @@
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-
-type TipoCobertura = 'publica' | 'prepaga' | 'particular';
-
-interface ResultadoFacturacion {
-  idCargo: number;
-  idReclamo: number | null;
-  montoPaciente: number;
-  montoCobertura: number;
-}
+import { ref, watch, toRefs } from 'vue';
+import { prestacion } from '../state/estadoFacturacion';
+import type { ResultadoFacturacion } from '../state/estadoFacturacion';
 
 const props = defineProps<{
   idCuentaInicial?: number | null;
 }>();
 
-const idCuenta = ref<number | null>(
-  props.idCuentaInicial ?? null
-);
-
-const concepto = ref('Consulta Médica General');
-const valorBase = ref<number | null>(15000);
-const tipoCobertura = ref<TipoCobertura>('particular');
-const copago = ref<number | null>(3000);
-const entidadDestino = ref('');
+const {
+  idCuenta,
+  concepto,
+  valorBase,
+  tipoCobertura,
+  copago,
+  entidadDestino,
+  confirmando,
+  registrado,
+  mensajeError,
+  resultado
+} = toRefs(prestacion);
 
 const cargando = ref(false);
-const confirmando = ref(false);
-const registrado = ref(false);
 
-const mensajeError = ref('');
-const resultado = ref<ResultadoFacturacion | null>(null);
+
 
 watch(
   () => props.idCuentaInicial,
-  (nuevoId) => {
+  (nuevoId, anteriorId) => {
     if (
       typeof nuevoId === 'number' &&
       Number.isSafeInteger(nuevoId) &&
-      nuevoId > 0
+      nuevoId > 0 &&
+      (anteriorId !== undefined || idCuenta.value === null)
     ) {
       idCuenta.value = nuevoId;
     }
-  }
+  },
+  { immediate: true }
 );
+
 
 watch(
   [
@@ -97,9 +93,8 @@ function validar(): boolean {
     mensajeError.value = 'Ingresá un concepto válido.';
     return false;
   }
-
-  if (!importeValido(valorBase.value)) {
-    mensajeError.value = 'Ingresá un valor base válido.';
+if (!importeValido(valorBase.value) || valorBase.value <= 0) {
+    mensajeError.value = 'Ingresá un valor base mayor a cero.';
     return false;
   }
 
