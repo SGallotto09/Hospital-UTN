@@ -12,10 +12,7 @@ router.get('/', verificarRol(['Enfermero']), (req, res) =>
 router.post(
     '/',
     verificarRol(['Enfermero']),
-    (req, res) => {
-        req.body.id_enfermero = req.session.usuarioId;
-        return administracionMedicacionController.administrar(req, res);
-    }
+    (req, res) => administracionMedicacionController.administrar(req, res)
 );
 
 export default router;

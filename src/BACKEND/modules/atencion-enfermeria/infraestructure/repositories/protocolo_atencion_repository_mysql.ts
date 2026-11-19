@@ -4,12 +4,28 @@ import type { ProtocoloAtencionRepository } from '../../domain/repositories/prot
 import type { ProtocoloAtencion } from '../../domain/entities/protocolo_atencion.js';
 import type { TareaEnfermeria } from '../../domain/entities/tarea_enfermeria.js';
 import type { ResultSetHeader } from 'mysql2/promise';
+import { ErrorEnfermeria } from '../../domain/errors/error_enfermeria.js';
 
 export class ProtocoloAtencionRepositoryMysql implements ProtocoloAtencionRepository {
     private readonly db = Database.getInstance();
 
 
     async guardar(protocolo: ProtocoloAtencion): Promise<number> {
+        const [asignaciones] = await this.db.query(
+            `SELECT id
+             FROM asignaciones_camas
+             WHERE id_paciente = ? AND fecha_egreso IS NULL
+             LIMIT 2`,
+            [protocolo.id_paciente]
+        );
+        const asignaciones_activas = asignaciones as { id: number }[];
+        if (asignaciones_activas.length === 0) {
+            throw new ErrorEnfermeria('El paciente no tiene una internación activa.', 404);
+        }
+        if (asignaciones_activas.length !== 1) {
+            throw new ErrorEnfermeria('El paciente tiene más de una internación activa.', 409);
+        }
+
         const [resultado] = await this.db.query(
             `INSERT INTO protocolos_atencion
                 (id_paciente, tipo_protocolo, fecha_generacion)
@@ -22,6 +38,9 @@ export class ProtocoloAtencionRepositoryMysql implements ProtocoloAtencionReposi
         );
 
         const id_protocolo = (resultado as ResultSetHeader).insertId;
+        if (!Number.isSafeInteger(id_protocolo) || id_protocolo <= 0) {
+            throw new Error('MySQL no devolvió un ID válido para el protocolo');
+        }
 
         try {
             for (const tarea of protocolo.tareas) {
@@ -41,15 +60,27 @@ export class ProtocoloAtencionRepositoryMysql implements ProtocoloAtencionReposi
                     `DELETE FROM tareas_enfermeria WHERE id_protocolo = ?`,
                     [id_protocolo]
                 );
+            } catch (error_limpieza_tareas) {
+                console.error(
+                    `Falló la limpieza de las tareas creadas para el protocolo ${id_protocolo}:`,
+                    error_limpieza_tareas
+                );
+            }
+
+            try {
                 await this.db.query(
                     `DELETE FROM protocolos_atencion WHERE id = ?`,
                     [id_protocolo]
                 );
-            } catch (error_limpieza) {
+            } catch (error_limpieza_protocolo) {
                 console.error(
-                    'No se pudo eliminar el protocolo incompleto:',
-                    error_limpieza
+                    `Falló la limpieza del protocolo incompleto ${id_protocolo}:`,
+                    error_limpieza_protocolo
                 );
+            }
+
+            if (error instanceof Error) {
+                console.error(`Falló la creación de tareas del protocolo ${id_protocolo}:`, error);
             }
 
             throw error;
@@ -103,7 +134,13 @@ export class ProtocoloAtencionRepositoryMysql implements ProtocoloAtencionReposi
         );
 
         if ((resultado as ResultSetHeader).affectedRows === 0) {
-            throw new Error('No se encontró la tarea indicada.');
+            const [filas] = await this.db.query(
+                'SELECT id FROM tareas_enfermeria WHERE id = ? LIMIT 1',
+                [id_tarea]
+            );
+            if ((filas as { id: number }[]).length === 0) {
+                throw new ErrorEnfermeria('No se encontró la tarea indicada.', 404);
+            }
         }
     }
 

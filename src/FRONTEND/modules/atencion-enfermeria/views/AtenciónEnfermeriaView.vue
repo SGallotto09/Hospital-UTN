@@ -257,9 +257,9 @@ onMounted(cargar_pacientes);
                     </p>
                 </div>
 
-                <span class="alert-button">
+                <RouterLink to="/enfermeria/alertas" class="alert-button">
                     Revisá los pacientes señalados
-                </span>
+                </RouterLink>
             </section>
 
             <div
@@ -826,6 +826,7 @@ onMounted(cargar_pacientes);
     background: #ffffff;
     color: #c23939;
     font-size: 10px;
+    text-decoration: none;
 }
 
 /* PACIENTES */

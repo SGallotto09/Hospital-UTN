@@ -18,9 +18,11 @@ const pacientes = ref<Paciente[]>([]);
 const buscador = ref("");
 const cargando = ref(false);
 const error = ref("");
+let solicitud_actual = 0;
 
 
 async function cargarPacientes() {
+    const id_solicitud = ++solicitud_actual;
     cargando.value = true;
     error.value = "";
 
@@ -36,12 +38,21 @@ async function cargarPacientes() {
             throw new Error("Error al obtener los pacientes");
         }
 
-        pacientes.value = await respuesta.json();
+        const resultados = await respuesta.json() as Paciente[];
+        if (id_solicitud === solicitud_actual) {
+            pacientes.value = resultados;
+        }
 
-    } catch {
-        error.value = "No se pudo conectar con el servidor";
+    } catch (e) {
+        if (id_solicitud === solicitud_actual) {
+            error.value = e instanceof Error
+                ? e.message
+                : "No se pudo conectar con el servidor";
+        }
     } finally {
-        cargando.value = false;
+        if (id_solicitud === solicitud_actual) {
+            cargando.value = false;
+        }
     }
 }
 
@@ -154,7 +165,7 @@ watch(buscador, () => {
                             class="status"
                             :class="{
                                 warning: paciente.estado === 'Requiere atención',
-                                neutral: paciente.estado === 'Sin registros'
+                                neutral: paciente.estado === 'Sin registro'
                             }"
                         >
                             {{ paciente.estado }}

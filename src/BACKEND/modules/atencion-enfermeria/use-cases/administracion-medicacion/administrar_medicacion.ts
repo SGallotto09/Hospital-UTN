@@ -1,6 +1,7 @@
 
 import type { AdministracionMedicacionRepository } from '../../domain/repositories/administracion_medicacion_repository.js';
 import { event_bus } from '../../../../events/event_bus.js';
+import { ErrorEnfermeria } from '../../domain/errors/error_enfermeria.js';
 
 export class AdministrarMedicacion {
 
@@ -16,20 +17,20 @@ export class AdministrarMedicacion {
     ): Promise<number> {
 
         if (!Number.isInteger(id_indicacion_medica) || id_indicacion_medica <= 0) {
-            throw new Error('El ID de la indicación médica no es válido');
+            throw new ErrorEnfermeria('El ID de la indicación médica no es válido', 400);
         }
 
         if (!Number.isInteger(id_enfermero) || id_enfermero <= 0) {
-            throw new Error('El ID del enfermero no es válido');
+            throw new ErrorEnfermeria('El ID del enfermero no es válido', 400);
         }
 
         if (!(horario_programado instanceof Date) || Number.isNaN(horario_programado.getTime())) {
-            throw new Error('El horario programado no es válido');
+            throw new ErrorEnfermeria('El horario programado no es válido', 400);
         }
 
         if (cantidad_administrada !== undefined &&
             (!Number.isSafeInteger(cantidad_administrada) || cantidad_administrada <= 0)) {
-            throw new Error('La cantidad administrada debe ser un entero positivo');
+            throw new ErrorEnfermeria('La cantidad administrada debe ser un entero positivo', 400);
         }
 
         const indicacion =
@@ -38,23 +39,23 @@ export class AdministrarMedicacion {
             );
 
         if (indicacion === null) {
-            throw new Error('No se encontró la indicación médica');
+            throw new ErrorEnfermeria('No se encontró la indicación médica', 404);
         }
 
         if (!Number.isSafeInteger(indicacion.cantidad) || indicacion.cantidad <= 0) {
-            throw new Error('La cantidad indicada debe ser un entero positivo');
+            throw new ErrorEnfermeria('La cantidad indicada debe ser un entero positivo', 400);
         }
 
         const cantidad_realmente_administrada = cantidad_administrada ?? indicacion.cantidad;
         if (cantidad_realmente_administrada !== indicacion.cantidad) {
-            throw new Error('La cantidad administrada debe coincidir con la cantidad indicada');
+            throw new ErrorEnfermeria('La cantidad administrada debe coincidir con la cantidad indicada', 400);
         }
 
         const inicio = new Date(`${indicacion.fecha}T${indicacion.hora_inicio}`);
         const frecuencia = indicacion.frecuencia_horas;
 
         if (Number.isNaN(inicio.getTime()) || !Number.isInteger(frecuencia) || frecuencia <= 0) {
-            throw new Error('Los datos de la indicación no son válidos');
+            throw new ErrorEnfermeria('Los datos de la indicación no son válidos', 400);
         }
 
         const intervalo = frecuencia * 60 * 60 * 1000;
@@ -62,9 +63,7 @@ export class AdministrarMedicacion {
         const numero_dosis = Math.round(diferencia / intervalo);
 
         if (numero_dosis < 0 || Math.abs(diferencia - numero_dosis * intervalo) > 1000) {
-            throw new Error(
-                'El horario seleccionado no corresponde a una dosis programada'
-            );
+            throw new ErrorEnfermeria('El horario seleccionado no corresponde a una dosis programada', 400);
         }
 
         const ahora = new Date();
@@ -73,9 +72,7 @@ export class AdministrarMedicacion {
         );
 
         if (diferencia_horario > 30 * 60 * 1000) {
-            throw new Error(
-                'La medicación está fuera del horario permitido de ±30 minutos'
-            );
+            throw new ErrorEnfermeria('La medicación está fuera del horario permitido de ±30 minutos', 400);
         }
 
         const ya_administrada =
@@ -85,7 +82,7 @@ export class AdministrarMedicacion {
             );
 
         if (ya_administrada) {
-            throw new Error('Esta dosis ya fue administrada');
+            throw new ErrorEnfermeria('Esta dosis ya fue administrada', 409);
         }
 
         const id_administracion_medicacion =

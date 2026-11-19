@@ -2,29 +2,16 @@
 
 ## Administración de medicación
 
-- El repositorio actualiza `insumos.stock` y después inserta en
-  `administracion_medicacion`. Si el INSERT falla, intenta devolver la cantidad
-  al stock. Esta compensación reduce la inconsistencia, pero no es atómica: si
-  también falla la compensación, debe revisarse el stock manualmente.
-- La cantidad realmente administrada se usa para descontar stock y se transmite
-  en el evento `MedicacionAdministrada`, pero el INSERT actual solo persiste
-  `id_indicacion_medica`, `estado`, `id_enfermero` y `fecha_hora`. No hay una
-  solución de persistencia verificable con el esquema disponible. Para guardar
-  esa cantidad hace falta confirmar una columna existente o autorizar un cambio
-  de esquema.
-- La compensación del stock también puede dejar una inconsistencia si falla, o
-  si el INSERT fue confirmado por MySQL pero la aplicación recibió un error de
-  comunicación. Sin transacciones ni una clave de idempotencia confirmada, no
-  se puede garantizar el resultado ante esos fallos.
-- La protección contra dosis repetidas vuelve a consultar inmediatamente antes
-  de actualizar el stock. Sin una restricción única confirmada en MySQL, no se
-  puede impedir de forma garantizada que dos solicitudes simultáneas registren
-  la misma dosis. No se debe afirmar que esta comprobación es atómica.
-- No se encontró un archivo de esquema SQL en el repositorio. Por eso no se pudo
-  contrastar si `indicacion_medica.hora_incio` (así aparece escrito en la
-  consulta), `indicacion_medica.frecuencia_hora` y el resto de columnas existen
-  con esos nombres. Confirmar el esquema real antes de corregir nombres o
-  agregar persistencia.
+- Atención y Enfermería no descuenta stock. Guarda primero la administración y luego un consumo `pendiente`; Recursos-Camas procesa ese consumo y es el único módulo que realiza el descuento.
+- Si falla el INSERT del consumo, el repositorio consulta `consumos_medicacion` por `id_administracion`. Solo considera completada la operación si encuentra exactamente una fila con insumo, cantidad y piso esperados. No elimina la administración clínica. Una lectura sin filas es solo una observación de ausencia en ese momento; si la lectura también falla, el resultado del INSERT queda indeterminado.
+- El GET de medicaciones detecta y registra las administraciones `Administrada` sin fila de consumo. No las reconstruye automáticamente: la administración no persiste cantidad, insumo, piso ni asignación de cama históricos. Usar los valores actuales de indicación o cama podría crear un consumo incorrecto y provocar un doble descuento. El diagnóstico corre cuando se consulta el listado, no es un worker autónomo.
+- La comprobación de dosis existente sigue siendo una consulta por indicación y ventana de ±30 minutos. No hay en este repositorio ni en un esquema verificado una garantía que serialice solicitudes simultáneas en una o varias instancias.
+- El registro de signos vitales y la creación de protocolos verifican que el paciente tenga exactamente una asignación activa antes de persistir. La comprobación y el INSERT son escrituras separadas, por lo que no eliminan una carrera con un egreso concurrente.
+- Pacientes Internados y el dashboard leen el último signo vital ocurrido desde el ingreso a la asignación activa. El GET de historial por paciente conserva el historial disponible.
+- La pantalla de Alertas deriva las temperaturas superiores a 39 °C del endpoint existente del dashboard; no crea alertas de muestra ni persiste una resolución.
+- La búsqueda de pacientes ignora respuestas HTTP antiguas si una consulta más reciente ya terminó, evitando que resultados atrasados reemplacen el filtro actual.
+- Se valida cantidad contra la indicación y se comprueba stock antes de guardar, pero esa lectura no reserva stock. El inventario puede agotarse antes del procesamiento; Recursos-Camas envía esos consumos a revisión.
+- No se encontró un archivo de esquema SQL y no fue posible consultar `information_schema` desde el entorno durante la implementación. No se afirma que `consumos_medicacion.id_administracion` sea único; debe confirmarlo el responsable de la base antes de depender de ello.
 
 ## Protocolos
 
@@ -85,3 +72,27 @@ persistentemente única de asociar el protocolo a `id_asignacion_cama` (por
 ejemplo, una columna/restricción confirmada por el responsable del esquema).
 Hasta que ese contrato y el vínculo persistente existan, se conserva la
 generación manual y no se genera un motivo por inferencia.
+
+## Revisión y cambios de autoría
+
+- La ruta POST de medicación obtiene ahora `id_enfermero` de `req.session.usuarioId`;
+  el controlador no lee ese campo del body. Los signos vitales usan la misma regla.
+- La administración y su fila de consumo se guardan con dos escrituras. Si falla el INSERT del consumo, se consulta su estado y nunca se borra la administración clínica; si la consulta no encuentra la fila o no logra determinar el resultado, queda para revisión. La detección al consultar medicaciones no reconstruye consumos automáticamente por falta de snapshots históricos confiables.
+- `MedicacionAdministrada` se emite después de guardar la administración y el
+  consumo. El servidor no registra hoy `MedicacionAdministradaListener`; el
+  cobro funciona mediante el procesador de Facturación que recupera consumos
+  persistidos. Registrar también el listener sin deduplicación durable podría
+  competir con ese procesador y duplicar cargos. El responsable de Facturación
+  debe acordar una única vía o una deduplicación durable antes de activar ambos.
+- La protección de dosis repetidas conserva una consulta previa y una segunda
+  comprobación al guardar, pero no hay restricción única confirmada que cierre
+  la carrera entre dos solicitudes concurrentes.
+- El dashboard ahora exige rol `Enfermero`, al igual que las rutas operativas.
+  Signos vitales responde 400 ante valores inválidos, 401 sin identidad de
+  sesión, 403 mediante IAM y 500 ante errores reales de persistencia. La búsqueda
+  de pacientes no consulta admisión para convertir IDs válidos pero inexistentes
+  en 404; ese contrato debe acordarse si se requiere esa distinción.
+- La creación de protocolos requiere una asignación activa única y guarda protocolo y tareas en escrituras separadas. Si falla una tarea, intenta limpiar los registros recién creados e informa los errores de limpieza. Sin transacciones, la compensación no es atómica. Repetir el estado actual de una tarea existente se acepta como operación idempotente.
+- Se agregaron pruebas unitarias y HTTP con dependencias simuladas/controladas.
+  No prueban persistencia en MySQL real, despliegue, ni una solicitud visual en
+  un navegador conectado a la base compartida.

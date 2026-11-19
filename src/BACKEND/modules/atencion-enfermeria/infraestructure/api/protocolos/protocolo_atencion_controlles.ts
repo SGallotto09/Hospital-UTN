@@ -4,6 +4,7 @@ import {
     generar_protocolo_use_case,
     protocolo_repository
 } from './protocolo_atencion_dependencies.js';
+import { ErrorEnfermeria } from '../../../domain/errors/error_enfermeria.js';
 
 export class ProtocoloAtencionController {
 
@@ -33,13 +34,12 @@ export class ProtocoloAtencionController {
             });
 
         } catch (error) {
-            console.error('Error al generar protocolo:', error);
-
-            res.status(500).json({
-                mensaje: error instanceof Error
-                    ? error.message
-                    : 'Error interno al generar el protocolo.'
-            });
+            if (error instanceof ErrorEnfermeria) {
+                res.status(error.estado_http).json({ mensaje: error.message });
+            } else {
+                console.error('Error interno al generar protocolo:', error);
+                res.status(500).json({ mensaje: 'Error interno al generar el protocolo.' });
+            }
         }
     }
 
@@ -59,9 +59,9 @@ export class ProtocoloAtencionController {
             res.status(200).json({ protocolos });
 
         } catch (error) {
-            console.error('Error al obtener protocolos:', error);
-
-            res.status(500).json({
+            const estado_http = error instanceof ErrorEnfermeria && error.estado_http === 404 ? 404 : 500;
+            if (estado_http === 500) console.error('Error al obtener protocolos:', error);
+            res.status(estado_http).json({
                 mensaje: 'Error al obtener los protocolos del paciente.'
             });
         }
@@ -93,9 +93,9 @@ export class ProtocoloAtencionController {
             });
 
         } catch (error) {
-            console.error('Error al actualizar tarea:', error);
-
-            res.status(500).json({
+            const estado_http = error instanceof ErrorEnfermeria && error.estado_http === 404 ? 404 : 500;
+            if (estado_http === 500) console.error('Error al actualizar tarea:', error);
+            res.status(estado_http).json({
                 mensaje: 'Error al actualizar el estado de la tarea.'
             });
         }

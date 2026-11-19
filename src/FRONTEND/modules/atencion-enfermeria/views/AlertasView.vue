@@ -1,150 +1,135 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { onMounted, ref } from "vue";
+
+interface PacienteDashboard {
+    id: number;
+    nombre: string;
+    apellido: string;
+    habitacion: number;
+    temperatura: number | null;
+    fecha_hora: string | null;
+}
 
 interface Alerta {
-id: number;
-paciente: string;
-habitacion: string;
-tipo: string;
-mensaje: string;
-hora: string;
-prioridad: "Alta" | "Media";
-resuelta: boolean;
+    id: number;
+    paciente: string;
+    habitacion: number;
+    mensaje: string;
+    hora: string;
 }
 
-const alertas = ref<Alerta[]>([
-{
-id: 1,
-paciente: "Pedro Gómez",
-habitacion: "206",
-tipo: "Temperatura elevada",
-mensaje: "Temperatura registrada de 39.4 °C.",
-hora: "14:15",
-prioridad: "Alta",
-resuelta: false,
-},
-{
-id: 2,
-paciente: "Ana Rojas",
-habitacion: "205",
-tipo: "Control pendiente",
-mensaje: "El control de signos vitales se encuentra pendiente.",
-hora: "14:00",
-prioridad: "Media",
-resuelta: false,
-},
-]);
+const alertas = ref<Alerta[]>([]);
+const cargando = ref(false);
+const error = ref("");
 
-const alertasPendientes = computed(() => {
-return alertas.value.filter((alerta) => !alerta.resuelta);
-});
+function hora_control(fecha: string | null): string {
+    if (!fecha) return "Hora no disponible";
 
-function resolverAlerta(alerta: Alerta) {
-alerta.resuelta = true;
+    const valor = new Date(fecha);
+    if (Number.isNaN(valor.getTime())) return "Hora no disponible";
+
+    return valor.toLocaleString("es-AR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
+
+async function cargar_alertas(): Promise<void> {
+    cargando.value = true;
+    error.value = "";
+
+    try {
+        const respuesta = await fetch("/api/dashboard", {
+            credentials: "include"
+        });
+        if (!respuesta.ok) {
+            throw new Error("No se pudieron cargar las alertas del monitoreo.");
+        }
+
+        const pacientes = await respuesta.json() as PacienteDashboard[];
+        alertas.value = pacientes
+            .filter((paciente) => paciente.temperatura !== null && paciente.temperatura > 39)
+            .map((paciente) => ({
+                id: paciente.id,
+                paciente: `${paciente.nombre} ${paciente.apellido}`,
+                habitacion: paciente.habitacion,
+                mensaje: `Temperatura registrada de ${paciente.temperatura} °C.`,
+                hora: hora_control(paciente.fecha_hora)
+            }));
+    } catch (e) {
+        error.value = e instanceof Error
+            ? e.message
+            : "Error al cargar las alertas.";
+    } finally {
+        cargando.value = false;
+    }
+}
+
+onMounted(cargar_alertas);
 </script>
 
 <template>
-<div class="page">
-<RouterLink
-    to="/enfermeria"
-    class="back-button"
-    >
-    ← Volver al panel
-</RouterLink>
-<header class="page-header">
-    <div>
-    <span class="section-label">MONITOREO</span>
+    <div class="page">
+        <RouterLink to="/enfermeria" class="back-button">
+            Volver al panel
+        </RouterLink>
 
-    <h1>Alertas</h1>
+        <header class="page-header">
+            <div>
+                <span class="section-label">MONITOREO</span>
+                <h1>Alertas</h1>
+                <p>Alertas generadas a partir de los últimos signos vitales de pacientes internados.</p>
+            </div>
 
-    <p>
-        Alertas generadas durante el monitoreo de pacientes internados.
-    </p>
+            <div class="alert-count">
+                <strong>{{ alertas.length }}</strong>
+                <span>temperaturas elevadas</span>
+            </div>
+        </header>
+
+        <p v-if="cargando" class="empty">Cargando alertas...</p>
+        <p v-else-if="error" class="message error" role="alert">{{ error }}</p>
+
+        <section v-else-if="alertas.length > 0" class="alerts-list">
+            <article
+                v-for="alerta in alertas"
+                :key="alerta.id"
+                class="alert-card high"
+            >
+                <div class="alert-icon">!</div>
+
+                <div class="alert-main">
+                    <div class="alert-title">
+                        <div>
+                            <span class="priority">Prioridad Alta</span>
+                            <h2>Temperatura elevada</h2>
+                        </div>
+                        <span class="time">{{ alerta.hora }}</span>
+                    </div>
+
+                    <div class="patient">
+                        <strong>{{ alerta.paciente }}</strong>
+                        <span>Habitación {{ alerta.habitacion }}</span>
+                    </div>
+
+                    <p>{{ alerta.mensaje }}</p>
+                </div>
+            </article>
+        </section>
+
+        <section v-else class="empty">
+            <div class="empty-icon">✓</div>
+            <h2>No se detectaron temperaturas elevadas</h2>
+            <p>Los últimos controles disponibles no superan los 39 °C.</p>
+        </section>
+
+        <section class="alert-info">
+            <strong>Temperaturas superiores a 39 °C</strong>
+            <p>Se muestran para facilitar la revisión del equipo asistencial. La pantalla no reemplaza la valoración clínica ni registra la resolución de una alerta.</p>
+        </section>
     </div>
-
-    <div class="alert-count">
-    <strong>{{ alertasPendientes.length }}</strong>
-    <span>activas</span>
-    </div>
-</header>
-
-<section
-    v-if="alertasPendientes.length > 0"
-    class="alerts-list"
->
-    <article
-    v-for="alerta in alertasPendientes"
-    :key="alerta.id"
-    class="alert-card"
-    :class="{
-        high: alerta.prioridad === 'Alta'
-    }"
-    >
-    <div class="alert-icon">
-        !
-    </div>
-
-    <div class="alert-main">
-        <div class="alert-title">
-        <div>
-            <span class="priority">
-            Prioridad {{ alerta.prioridad }}
-            </span>
-
-            <h2>{{ alerta.tipo }}</h2>
-        </div>
-
-        <span class="time">
-            {{ alerta.hora }}
-        </span>
-        </div>
-
-        <div class="patient">
-        <strong>{{ alerta.paciente }}</strong>
-
-        <span>
-            Habitación {{ alerta.habitacion }}
-        </span>
-        </div>
-
-        <p>
-        {{ alerta.mensaje }}
-        </p>
-    </div>
-
-    <button
-        class="resolve-button"
-        @click="resolverAlerta(alerta)"
-    >
-        Marcar resuelta
-    </button>
-    </article>
-</section>
-
-<section
-    v-else
-    class="empty"
->
-    <div class="empty-icon">✓</div>
-
-    <h2>No hay alertas activas</h2>
-
-    <p>
-    Todos los pacientes se encuentran sin alertas pendientes.
-    </p>
-</section>
-
-<section class="alert-info">
-    <strong>Alertas de alta prioridad</strong>
-
-    <p>
-    Los parámetros críticos, como una temperatura superior a
-    39 °C, deberán generar una notificación prioritaria al
-    médico de guardia correspondiente al sector.
-    </p>
-</section>
-</div>
 </template>
 
 <style scoped>
@@ -314,6 +299,17 @@ cursor: pointer;
 .resolve-button:hover {
 border-color: #087fc4;
 color: #087fc4;
+}
+
+.message {
+padding: 16px;
+border-radius: 9px;
+font-size: 13px;
+}
+
+.message.error {
+background: #fff0f0;
+color: #b42318;
 }
 
 .empty {

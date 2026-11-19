@@ -8,10 +8,7 @@ const router: Router = Router();
 router.post(
     '/',
     verificarRol(['Enfermero']),
-    (req, res) => {
-        req.body.id_enfermero = req.session.usuarioId;
-        return signoVitalController.registrar(req, res);
-    }
+    (req, res) => signoVitalController.registrar(req, res)
 );
 
 router.get('/', verificarRol(['Enfermero']), (req, res) =>
