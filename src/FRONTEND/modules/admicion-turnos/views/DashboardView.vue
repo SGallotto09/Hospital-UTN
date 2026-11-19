@@ -1,23 +1,11 @@
 
 <script setup lang="ts">
+import { computed, onMounted, ref } from "vue";
 
-import { computed } from "vue";
+// ==========================================
+// TIPOS
+// ==========================================
 
-
-// Fecha actual
-const fechaActual = computed(() => {
-
-    return new Intl.DateTimeFormat("es-AR", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric"
-    }).format(new Date());
-
-});
-
-
-// Navegación hacia otras vistas
 type Destino =
     | "turnos"
     | "agenda"
@@ -25,144 +13,695 @@ type Destino =
     | "triaje"
     | "lista-espera";
 
+type EstadoTurno =
+    | "Programado"
+    | "Confirmado"
+    | "En Sala de Espera"
+    | "Atendido"
+    | "Cancelado";
+
+type EstadoTriaje =
+    | "EN_ESPERA"
+    | "EN_ATENCION"
+    | "ATENDIDO";
+
+type NivelUrgencia = "ROJO" | "AMARILLO" | "VERDE";
+
+interface Medico {
+    id: number;
+    nombre: string;
+    apellido: string;
+}
+
+interface Paciente {
+    id: number;
+    nombre: string;
+    apellido: string;
+    dni: string;
+}
+
+interface Turno {
+    id: number;
+    idPaciente: number;
+    idMedico: number;
+    fechaHoraInicio: string;
+    fechaHoraFin: string;
+    estado: EstadoTurno;
+}
+
+interface SolicitudEspera {
+    id: number;
+    idPaciente: number;
+    idMedico: number;
+    fechaSolicitada: string;
+    fechaHoraIngreso: string;
+    estado: "EN_ESPERA" | "ASIGNADO" | "CANCELADO";
+}
+
+interface Triaje {
+    id: number;
+    idPaciente: number;
+    nivelUrgencia: NivelUrgencia;
+    observaciones: string | null;
+    fechaHoraIngreso: string;
+    estado: EstadoTriaje;
+}
+
+interface RespuestaTurnos {
+    turnos: unknown[];
+}
+
+interface RespuestaPacientes {
+    pacientes: unknown[];
+}
+
+interface RespuestaMedicos {
+    medicos: unknown[];
+}
+
+interface RespuestaListaEspera {
+    solicitudes: unknown[];
+}
+
+interface RespuestaTriaje {
+    triajes: unknown[];
+}
+
+interface Indicador {
+    titulo: string;
+    valor: number;
+    detalle: string;
+    icono: string;
+    color: string;
+}
+
+interface TurnoDashboard {
+    id: number;
+    hora: string;
+    paciente: string;
+    dni: string;
+    medico: string;
+    estado: EstadoTurno;
+    clase: string;
+}
+
+interface PacienteDashboard {
+    id: number;
+    nombre: string;
+    medico: string;
+    fecha: string;
+    posicion: number;
+}
+
+interface AlertaDashboard {
+    id: number;
+    paciente: string;
+    nivel: NivelUrgencia;
+    descripcion: string;
+    hora: string;
+}
+
+// ==========================================
+// ESTADO
+// ==========================================
+
+const medicos = ref<Medico[]>([]);
+const pacientes = ref<Paciente[]>([]);
+const turnos = ref<Turno[]>([]);
+const solicitudesEspera = ref<SolicitudEspera[]>([]);
+const triajes = ref<Triaje[]>([]);
+
+const cargando = ref(false);
+const error = ref("");
+
+const fechaActual = computed(() => {
+    return new Intl.DateTimeFormat("es-AR", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+    }).format(new Date());
+});
+
+function obtenerFechaLocal(fecha: Date): string {
+    const anio = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dia = String(fecha.getDate()).padStart(2, "0");
+
+    return `${anio}-${mes}-${dia}`;
+}
+
+const hoy = obtenerFechaLocal(new Date());
+
+// ==========================================
+// NAVEGACIÓN
+// ==========================================
+
 const emit = defineEmits<{
     (event: "navegar", destino: Destino): void;
 }>();
 
+function navegar(destino: Destino): void {
+    emit("navegar", destino);
+}
 
-// Datos de prueba: resumen general
-const indicadores = [
+// ==========================================
+// UTILIDADES DE API Y NORMALIZACIÓN
+// ==========================================
+
+async function solicitarAPI<T>(
+    url: string,
+    opciones: RequestInit = {}
+): Promise<T> {
+    const respuesta = await fetch(url, {
+        ...opciones,
+        credentials: "same-origin",
+        headers: {
+            "Content-Type": "application/json",
+            ...opciones.headers
+        }
+    });
+
+    const datos = await respuesta.json().catch(() => ({}));
+
+    if (!respuesta.ok) {
+        const mensaje =
+            datos &&
+            typeof datos === "object" &&
+            "mensaje" in datos &&
+            typeof datos.mensaje === "string"
+                ? datos.mensaje
+                : `Error HTTP ${respuesta.status}`;
+
+        throw new Error(mensaje);
+    }
+
+    return datos as T;
+}
+
+function obtenerPropiedad(
+    objeto: Record<string, unknown>,
+    ...nombres: string[]
+): unknown {
+    for (const nombre of nombres) {
+        if (objeto[nombre] !== undefined) {
+            return objeto[nombre];
+        }
+    }
+
+    return undefined;
+}
+
+function convertirNumero(valor: unknown): number {
+    const numero = Number(valor);
+    return Number.isFinite(numero) ? numero : 0;
+}
+
+function normalizarMedico(datos: unknown): Medico {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: convertirNumero(obtenerPropiedad(objeto, "id", "_id")),
+        nombre: String(
+            obtenerPropiedad(objeto, "nombre", "_nombre") ?? ""
+        ),
+        apellido: String(
+            obtenerPropiedad(objeto, "apellido", "_apellido") ?? ""
+        )
+    };
+}
+
+function normalizarPaciente(datos: unknown): Paciente {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: convertirNumero(obtenerPropiedad(objeto, "id", "_id")),
+        nombre: String(
+            obtenerPropiedad(objeto, "nombre", "_nombre") ?? ""
+        ),
+        apellido: String(
+            obtenerPropiedad(objeto, "apellido", "_apellido") ?? ""
+        ),
+        dni: String(
+            obtenerPropiedad(objeto, "dni", "_dni") ?? "-"
+        )
+    };
+}
+
+function normalizarTurno(datos: unknown): Turno {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: convertirNumero(obtenerPropiedad(objeto, "id", "_id")),
+        idPaciente: convertirNumero(
+            obtenerPropiedad(objeto, "idPaciente", "_idPaciente")
+        ),
+        idMedico: convertirNumero(
+            obtenerPropiedad(objeto, "idMedico", "_idMedico")
+        ),
+        fechaHoraInicio: String(
+            obtenerPropiedad(
+                objeto,
+                "fechaHoraInicio",
+                "_fechaHoraInicio"
+            ) ?? ""
+        ),
+        fechaHoraFin: String(
+            obtenerPropiedad(
+                objeto,
+                "fechaHoraFin",
+                "_fechaHoraFin"
+            ) ?? ""
+        ),
+        estado: String(
+            obtenerPropiedad(objeto, "estado", "_estado") ?? "Programado"
+        ) as EstadoTurno
+    };
+}
+
+function normalizarSolicitud(datos: unknown): SolicitudEspera {
+    const objeto = datos as Record<string, unknown>;
+
+    return {
+        id: convertirNumero(obtenerPropiedad(objeto, "id", "_id")),
+        idPaciente: convertirNumero(
+            obtenerPropiedad(objeto, "idPaciente", "_idPaciente")
+        ),
+        idMedico: convertirNumero(
+            obtenerPropiedad(objeto, "idMedico", "_idMedico")
+        ),
+        fechaSolicitada: String(
+            obtenerPropiedad(
+                objeto,
+                "fechaSolicitada",
+                "_fechaSolicitada"
+            ) ?? ""
+        ),
+        fechaHoraIngreso: String(
+            obtenerPropiedad(
+                objeto,
+                "fechaHoraIngreso",
+                "_fechaHoraIngreso"
+            ) ?? ""
+        ),
+        estado: String(
+            obtenerPropiedad(objeto, "estado", "_estado") ?? "EN_ESPERA"
+        ) as SolicitudEspera["estado"]
+    };
+}
+
+function normalizarTriaje(datos: unknown): Triaje {
+    const objeto = datos as Record<string, unknown>;
+
+    const observaciones = obtenerPropiedad(
+        objeto,
+        "observaciones",
+        "_observaciones"
+    );
+
+    return {
+        id: convertirNumero(obtenerPropiedad(objeto, "id", "_id")),
+        idPaciente: convertirNumero(
+            obtenerPropiedad(objeto, "idPaciente", "_idPaciente")
+        ),
+        nivelUrgencia: String(
+            obtenerPropiedad(
+                objeto,
+                "nivelUrgencia",
+                "_nivelUrgencia"
+            ) ?? "VERDE"
+        ) as NivelUrgencia,
+        observaciones:
+            typeof observaciones === "string" ? observaciones : null,
+        fechaHoraIngreso: String(
+            obtenerPropiedad(
+                objeto,
+                "fechaHoraIngreso",
+                "_fechaHoraIngreso"
+            ) ?? ""
+        ),
+        estado: String(
+            obtenerPropiedad(objeto, "estado", "_estado") ?? "EN_ESPERA"
+        ) as EstadoTriaje
+    };
+}
+
+// ==========================================
+// FORMATO DE FECHAS Y HORARIOS
+// ==========================================
+
+function formatearHora(fechaHora: string): string {
+    if (!fechaHora) return "--:--";
+
+    const fecha = new Date(fechaHora);
+
+    if (Number.isNaN(fecha.getTime())) return "--:--";
+
+    return new Intl.DateTimeFormat("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    }).format(fecha);
+}
+
+function formatearFechaCorta(fecha: string): string {
+    if (!fecha) return "-";
+
+    if (fecha === hoy) return "Hoy";
+
+    const manana = new Date();
+    manana.setDate(manana.getDate() + 1);
+
+    if (fecha === obtenerFechaLocal(manana)) return "Mañana";
+
+    const [anio, mes, dia] = fecha.slice(0, 10).split("-");
+    return `${dia}/${mes}/${anio}`;
+}
+
+// ==========================================
+// OBTENER INFORMACIÓN DE PACIENTES Y MÉDICOS
+// ==========================================
+
+function obtenerNombrePaciente(idPaciente: number): string {
+    const paciente = pacientes.value.find(
+        (item) => item.id === idPaciente
+    );
+
+    return paciente
+        ? `${paciente.nombre} ${paciente.apellido}`.trim()
+        : `Paciente #${idPaciente}`;
+}
+
+function obtenerDNI(idPaciente: number): string {
+    return pacientes.value.find(
+        (item) => item.id === idPaciente
+    )?.dni ?? "-";
+}
+
+function obtenerNombreMedico(idMedico: number): string {
+    const medico = medicos.value.find(
+        (item) => item.id === idMedico
+    );
+
+    return medico
+        ? `${medico.nombre} ${medico.apellido}`.trim()
+        : `Médico #${idMedico}`;
+}
+
+// ==========================================
+// CARGA DE AGENDA
+// ==========================================
+
+async function cargarAgenda(): Promise<void> {
+    const respuestaMedicos = await solicitarAPI<RespuestaMedicos>(
+        "/api/admisiones/medicos"
+    );
+
+    if (!Array.isArray(respuestaMedicos.medicos)) {
+        throw new Error(
+            "La API de médicos devolvió un formato inválido."
+        );
+    }
+
+    medicos.value = respuestaMedicos.medicos.map(normalizarMedico);
+
+    // Consultamos la agenda de cada médico para obtener
+    // todos los turnos registrados para el día actual.
+
+    const agendas = await Promise.all(
+        medicos.value.map((medico) =>
+            solicitarAPI<RespuestaTurnos>(
+                `/api/admisiones/turnos/agenda?idMedico=${medico.id}&fecha=${hoy}`
+            )
+        )
+    );
+
+    const todosLosTurnos = agendas.flatMap((agenda) => {
+        if (!Array.isArray(agenda.turnos)) {
+            throw new Error(
+                "La API de agenda devolvió un formato inválido."
+            );
+        }
+
+        return agenda.turnos.map(normalizarTurno);
+    });
+
+    turnos.value = todosLosTurnos;
+}
+
+// ==========================================
+// CARGA DE DATOS AUXILIARES
+// ==========================================
+
+async function cargarDatosAuxiliares(): Promise<void> {
+    const resultados = await Promise.allSettled([
+        solicitarAPI<RespuestaPacientes>(
+            "/api/admisiones/pacientes"
+        ),
+        solicitarAPI<RespuestaListaEspera>(
+            "/api/admisiones/lista-espera?estado=EN_ESPERA"
+        ),
+        solicitarAPI<RespuestaTriaje>(
+            "/api/admisiones/triaje"
+        )
+    ]);
+
+    const [
+        resultadoPacientes,
+        resultadoEspera,
+        resultadoTriaje
+    ] = resultados;
+
+    if (resultadoPacientes.status === "fulfilled") {
+        pacientes.value = Array.isArray(
+            resultadoPacientes.value.pacientes
+        )
+            ? resultadoPacientes.value.pacientes.map(normalizarPaciente)
+            : [];
+    }
+
+    if (resultadoEspera.status === "fulfilled") {
+        solicitudesEspera.value = Array.isArray(
+            resultadoEspera.value.solicitudes
+        )
+            ? resultadoEspera.value.solicitudes.map(normalizarSolicitud)
+            : [];
+    }
+
+    if (resultadoTriaje.status === "fulfilled") {
+        triajes.value = Array.isArray(
+            resultadoTriaje.value.triajes
+        )
+            ? resultadoTriaje.value.triajes.map(normalizarTriaje)
+            : [];
+    }
+}
+
+// ==========================================
+// CARGA GENERAL
+// ==========================================
+
+async function cargarDatos(): Promise<void> {
+    if (cargando.value) return;
+
+    cargando.value = true;
+    error.value = "";
+
+    try {
+        // Primero cargamos la agenda.
+        // Los errores de otros módulos no deben impedirlo.
+        await cargarAgenda();
+    } catch (err) {
+        error.value = err instanceof Error
+            ? `No se pudo cargar la agenda: ${err.message}`
+            : "No se pudo cargar la agenda.";
+
+        turnos.value = [];
+    }
+
+    // Después cargamos pacientes, lista de espera y triaje
+    // de manera independiente.
+    await cargarDatosAuxiliares();
+
+    cargando.value = false;
+}
+
+onMounted(() => {
+    void cargarDatos();
+});
+
+// ==========================================
+// INDICADORES REALES
+// ==========================================
+
+const cantidadConfirmados = computed(() =>
+    turnos.value.filter(
+        (turno) => turno.estado === "Confirmado"
+    ).length
+);
+
+const cantidadEnEspera = computed(() =>
+    turnos.value.filter(
+        (turno) => turno.estado === "En Sala de Espera"
+    ).length
+);
+
+const cantidadCancelados = computed(() =>
+    turnos.value.filter(
+        (turno) => turno.estado === "Cancelado"
+    ).length
+);
+
+const indicadores = computed<Indicador[]>(() => [
     {
         titulo: "Turnos de hoy",
-        valor: 24,
-        detalle: "Total de citas programadas",
+        valor: turnos.value.length,
+        detalle: "Total de citas registradas para hoy",
         icono: "▦",
         color: "blue"
     },
     {
         titulo: "Confirmados",
-        valor: 18,
-        detalle: "Pacientes que confirmaron",
+        valor: cantidadConfirmados.value,
+        detalle: "Pacientes con turno confirmado",
         icono: "✓",
         color: "green"
     },
     {
         titulo: "En sala de espera",
-        valor: 4,
+        valor: cantidadEnEspera.value,
         detalle: "Pacientes esperando atención",
         icono: "◷",
         color: "orange"
     },
     {
         titulo: "Cancelados",
-        valor: 2,
-        detalle: "Turnos anulados hoy",
+        valor: cantidadCancelados.value,
+        detalle: "Turnos cancelados para hoy",
         icono: "×",
         color: "red"
     }
-];
+]);
 
+// ==========================================
+// TODOS LOS TURNOS DEL DÍA
+// ==========================================
 
-// Datos de prueba: próximos turnos
-const proximosTurnos = [
-    {
-        hora: "10:00",
-        paciente: "Carlos López",
-        dni: "34.567.890",
-        medico: "Dr. Silva",
-        estado: "Confirmado",
-        clase: "confirmado"
-    },
-    {
-        hora: "10:30",
-        paciente: "María González",
-        dni: "29.456.789",
-        medico: "Dra. Fernández",
-        estado: "Programado",
-        clase: "programado"
-    },
-    {
-        hora: "11:00",
-        paciente: "Juan Gómez",
-        dni: "37.123.456",
-        medico: "Dr. Silva",
-        estado: "En sala de espera",
-        clase: "espera"
-    },
-    {
-        hora: "11:30",
-        paciente: "Lucía Martínez",
-        dni: "32.789.456",
-        medico: "Dra. Fernández",
-        estado: "Confirmado",
-        clase: "confirmado"
-    }
-];
+const proximosTurnos = computed<TurnoDashboard[]>(() => {
+    return turnos.value
+        .filter((turno) => {
+            const fecha = new Date(turno.fechaHoraInicio);
 
+            return (
+                !Number.isNaN(fecha.getTime()) &&
+                obtenerFechaLocal(fecha) === hoy
+            );
+        })
+        .sort(
+            (a, b) =>
+                new Date(a.fechaHoraInicio).getTime() -
+                new Date(b.fechaHoraInicio).getTime()
+        )
+        .map((turno) => {
+            let clase = "programado";
 
-// Datos de prueba: pacientes en lista de espera
-const pacientesEnEspera = [
-    {
-        nombre: "Luis Medina",
-        medico: "Dr. Silva",
-        fecha: "Hoy",
-        posicion: 1
-    },
-    {
-        nombre: "Pedro Ramírez",
-        medico: "Dr. Silva",
-        fecha: "Hoy",
-        posicion: 2
-    },
-    {
-        nombre: "Sofía Torres",
-        medico: "Dra. Fernández",
-        fecha: "Mañana",
-        posicion: 1
-    }
-];
+            switch (turno.estado) {
+                case "Confirmado":
+                    clase = "confirmado";
+                    break;
+                case "En Sala de Espera":
+                    clase = "espera";
+                    break;
+                case "Atendido":
+                    clase = "atendido";
+                    break;
+                case "Cancelado":
+                    clase = "cancelado";
+                    break;
+            }
 
+            return {
+                id: turno.id,
+                hora: formatearHora(turno.fechaHoraInicio),
+                paciente: obtenerNombrePaciente(turno.idPaciente),
+                dni: obtenerDNI(turno.idPaciente),
+                medico: obtenerNombreMedico(turno.idMedico),
+                estado: turno.estado,
+                clase
+            };
+        });
+});
 
-// Datos de prueba: triaje
-const alertasTriaje = [
-    {
-        paciente: "Paciente de guardia",
-        nivel: "ROJO",
-        descripcion: "Riesgo vital - Atención inmediata",
-        hora: "10:15"
-    },
-    {
-        paciente: "Paciente de guardia",
-        nivel: "AMARILLO",
-        descripcion: "Urgencia intermedia",
-        hora: "10:20"
-    }
-];
+// ==========================================
+// LISTA DE ESPERA
+// ==========================================
 
+const pacientesEnEspera = computed<PacienteDashboard[]>(() =>
+    [...solicitudesEspera.value]
+        .filter(
+            (solicitud) => solicitud.estado === "EN_ESPERA"
+        )
+        .sort(
+            (a, b) =>
+                new Date(a.fechaHoraIngreso).getTime() -
+                new Date(b.fechaHoraIngreso).getTime()
+        )
+        .slice(0, 3)
+        .map((solicitud, indice) => ({
+            id: solicitud.id,
+            nombre: obtenerNombrePaciente(solicitud.idPaciente),
+            medico: obtenerNombreMedico(solicitud.idMedico),
+            fecha: formatearFechaCorta(solicitud.fechaSolicitada),
+            posicion: indice + 1
+        }))
+);
 
-// Navegar hacia otra vista
-function navegar(destino: Destino) {
+// ==========================================
+// ALERTAS DE TRIAJE
+// ==========================================
 
-    emit("navegar", destino);
+const alertasTriaje = computed<AlertaDashboard[]>(() =>
+    [...triajes.value]
+        .filter(
+            (triaje) =>
+                triaje.estado === "EN_ESPERA" ||
+                triaje.estado === "EN_ATENCION"
+        )
+        .sort((a, b) => {
+            const prioridad: Record<NivelUrgencia, number> = {
+                ROJO: 1,
+                AMARILLO: 2,
+                VERDE: 3
+            };
 
-}
-
+            return (
+                prioridad[a.nivelUrgencia] -
+                    prioridad[b.nivelUrgencia] ||
+                new Date(a.fechaHoraIngreso).getTime() -
+                    new Date(b.fechaHoraIngreso).getTime()
+            );
+        })
+        .slice(0, 4)
+        .map((triaje) => ({
+            id: triaje.id,
+            paciente: obtenerNombrePaciente(triaje.idPaciente),
+            nivel: triaje.nivelUrgencia,
+            descripcion:
+                triaje.observaciones?.trim() ||
+                (triaje.estado === "EN_ATENCION"
+                    ? "Paciente en atención"
+                    : "Pendiente de atención"),
+            hora: formatearHora(triaje.fechaHoraIngreso)
+        }))
+);
 </script>
 
-
 <template>
-
     <main class="dashboard">
-
         <!-- ENCABEZADO -->
-
         <header class="dashboard-header">
-
             <div class="header-info">
-
-                <span class="eyebrow">
-                    ADMISIÓN / FRONT DESK
-                </span>
+                <span class="eyebrow">ADMISIÓN / FRONT DESK</span>
 
                 <h1>Panel de admisión</h1>
 
@@ -173,24 +712,38 @@ function navegar(destino: Destino) {
                 <span class="fecha-actual">
                     {{ fechaActual }}
                 </span>
-
             </div>
 
+            <button
+                type="button"
+                class="refresh-button"
+                :disabled="cargando"
+                @click="cargarDatos"
+            >
+                {{ cargando ? "Actualizando..." : "↻ Actualizar" }}
+            </button>
         </header>
 
+        <!-- MENSAJES -->
+        <div v-if="error" class="feedback error">
+            <span>{{ error }}</span>
+
+            <button
+                type="button"
+                @click="cargarDatos"
+            >
+                Reintentar
+            </button>
+        </div>
 
         <!-- INDICADORES -->
-
         <section class="indicators-grid">
-
             <article
                 v-for="indicador in indicadores"
                 :key="indicador.titulo"
                 class="indicator-card"
             >
-
                 <div class="indicator-top">
-
                     <span class="indicator-title">
                         {{ indicador.titulo }}
                     </span>
@@ -201,81 +754,58 @@ function navegar(destino: Destino) {
                     >
                         {{ indicador.icono }}
                     </span>
-
                 </div>
 
-
                 <strong class="indicator-value">
-                    {{ indicador.valor }}
+                    {{ cargando ? "—" : indicador.valor }}
                 </strong>
 
                 <span class="indicator-detail">
                     {{ indicador.detalle }}
                 </span>
-
             </article>
-
         </section>
 
-
         <!-- CONTENIDO PRINCIPAL -->
-
         <section class="dashboard-content">
-
-
-            <!-- PRÓXIMOS TURNOS -->
-
+            <!-- TURNOS DEL DÍA -->
             <article class="panel appointments-panel">
-
                 <div class="panel-header">
-
                     <div>
-                        <h2>Próximos turnos</h2>
-
-                        <p>
-                            Agenda médica del día
-                        </p>
+                        <h2>Turnos de hoy</h2>
+                        <p>Todos los turnos registrados para el día</p>
                     </div>
 
                     <button
+                        type="button"
                         class="text-button"
                         @click="navegar('turnos')"
                     >
                         Ver todos →
                     </button>
-
                 </div>
 
-
                 <div class="table-container">
-
                     <table>
-
                         <thead>
-
                             <tr>
                                 <th>Horario</th>
                                 <th>Paciente</th>
                                 <th>Médico</th>
                                 <th>Estado</th>
                             </tr>
-
                         </thead>
 
-
                         <tbody>
-
                             <tr
                                 v-for="turno in proximosTurnos"
-                                :key="turno.dni"
+                                :key="turno.id"
                             >
-
                                 <td class="time-cell">
                                     {{ turno.hora }}
                                 </td>
 
                                 <td>
-
                                     <div class="patient-name">
                                         {{ turno.paciente }}
                                     </div>
@@ -283,163 +813,146 @@ function navegar(destino: Destino) {
                                     <span class="patient-dni">
                                         DNI: {{ turno.dni }}
                                     </span>
-
                                 </td>
 
-                                <td>
-                                    {{ turno.medico }}
-                                </td>
+                                <td>{{ turno.medico }}</td>
 
                                 <td>
-
                                     <span
                                         class="status-badge"
                                         :class="`status-${turno.clase}`"
                                     >
                                         {{ turno.estado }}
                                     </span>
-
                                 </td>
-
                             </tr>
 
+                            <tr
+                                v-if="!cargando && proximosTurnos.length === 0"
+                            >
+                                <td colspan="4" class="empty-cell">
+                                    No hay turnos registrados para hoy.
+                                </td>
+                            </tr>
+
+                            <tr v-if="cargando">
+                                <td colspan="4" class="empty-cell">
+                                    Cargando agenda...
+                                </td>
+                            </tr>
                         </tbody>
-
                     </table>
-
                 </div>
-
             </article>
 
-
             <!-- COLUMNA DERECHA -->
-
             <div class="right-column">
-
-
                 <!-- LISTA DE ESPERA -->
-
                 <article class="panel">
-
                     <div class="panel-header">
-
                         <div>
                             <h2>Lista de espera</h2>
-
-                            <p>
-                                Pacientes pendientes
-                            </p>
+                            <p>Pacientes pendientes</p>
                         </div>
 
                         <button
+                            type="button"
                             class="text-button"
                             @click="navegar('lista-espera')"
                         >
                             Ver →
                         </button>
-
                     </div>
 
-
                     <div class="waiting-list">
-
                         <div
                             v-for="paciente in pacientesEnEspera"
-                            :key="paciente.nombre"
+                            :key="paciente.id"
                             class="waiting-item"
                         >
-
                             <div class="waiting-number">
                                 {{ paciente.posicion }}
                             </div>
 
                             <div class="waiting-info">
-
-                                <strong>
-                                    {{ paciente.nombre }}
-                                </strong>
+                                <strong>{{ paciente.nombre }}</strong>
 
                                 <span>
                                     {{ paciente.medico }}
                                     · {{ paciente.fecha }}
                                 </span>
-
                             </div>
-
                         </div>
 
-                    </div>
+                        <div
+                            v-if="!cargando && pacientesEnEspera.length === 0"
+                            class="empty-small"
+                        >
+                            No hay pacientes en lista de espera.
+                        </div>
 
+                        <div v-if="cargando" class="empty-small">
+                            Cargando lista de espera...
+                        </div>
+                    </div>
                 </article>
 
-
                 <!-- ALERTAS DE TRIAJE -->
-
                 <article class="panel triage-panel">
-
                     <div class="panel-header">
-
                         <div>
                             <h2>Triaje de guardia</h2>
-
-                            <p>
-                                Clasificaciones pendientes
-                            </p>
+                            <p>Clasificaciones pendientes</p>
                         </div>
 
                         <button
+                            type="button"
                             class="text-button"
                             @click="navegar('triaje')"
                         >
                             Ver →
                         </button>
-
                     </div>
 
-
                     <div
-                        v-for="(alerta, index) in alertasTriaje"
-                        :key="index"
+                        v-for="alerta in alertasTriaje"
+                        :key="alerta.id"
                         class="triage-alert"
                         :class="`triage-${alerta.nivel.toLowerCase()}`"
                     >
-
                         <div class="triage-alert-top">
-
-                            <strong>
-                                {{ alerta.nivel }}
-                            </strong>
-
-                            <span>
-                                {{ alerta.hora }}
-                            </span>
-
+                            <strong>{{ alerta.nivel }}</strong>
+                            <span>{{ alerta.hora }}</span>
                         </div>
 
-                        <p>
-                            {{ alerta.descripcion }}
-                        </p>
+                        <strong class="triage-patient">
+                            {{ alerta.paciente }}
+                        </strong>
 
+                        <p>{{ alerta.descripcion }}</p>
                     </div>
 
+                    <div
+                        v-if="!cargando && alertasTriaje.length === 0"
+                        class="empty-small"
+                    >
+                        No hay pacientes pendientes de atención en triaje.
+                    </div>
+
+                    <div v-if="cargando" class="empty-small">
+                        Cargando triajes...
+                    </div>
                 </article>
-
             </div>
-
         </section>
 
-
-        <div class="demo-notice">
-            Los datos mostrados son ilustrativos. La información real se obtendrá de la API del hospital.
+        <div class="data-notice">
+            Los indicadores y listados se actualizan con información obtenida de la API del hospital.
         </div>
-
     </main>
-
 </template>
 
-
 <style scoped>
-
 .dashboard {
     width: 100%;
     max-width: 1500px;
@@ -449,9 +962,7 @@ function navegar(destino: Destino) {
     box-sizing: border-box;
 }
 
-
 /* ENCABEZADO */
-
 .dashboard-header {
     display: flex;
     justify-content: space-between;
@@ -490,9 +1001,47 @@ button {
     cursor: pointer;
 }
 
+.refresh-button {
+    padding: 10px 14px;
+    border: 1px solid #dbe5ef;
+    border-radius: 8px;
+    background: white;
+    color: #2563eb;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.refresh-button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.feedback {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 12px 15px;
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.feedback.error {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.feedback button {
+    padding: 6px 10px;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    background: white;
+    color: #b91c1c;
+    font-size: 11px;
+}
 
 /* INDICADORES */
-
 .indicators-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -563,9 +1112,7 @@ button {
     color: #94a3b8;
 }
 
-
 /* CONTENIDO */
-
 .dashboard-content {
     display: grid;
     grid-template-columns: 1.55fr 1fr;
@@ -615,9 +1162,7 @@ button {
     font-weight: 600;
 }
 
-
 /* TABLA DE TURNOS */
-
 .table-container {
     width: 100%;
     overflow-x: auto;
@@ -688,9 +1233,24 @@ tbody tr:last-child td {
     color: #c2410c;
 }
 
+.status-atendido {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.status-cancelado {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.empty-cell {
+    padding: 28px 12px;
+    color: #94a3b8;
+    text-align: center;
+    white-space: normal;
+}
 
 /* LISTA DE ESPERA */
-
 .waiting-list {
     display: flex;
     flex-direction: column;
@@ -725,6 +1285,7 @@ tbody tr:last-child td {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    min-width: 0;
 }
 
 .waiting-info strong {
@@ -737,9 +1298,14 @@ tbody tr:last-child td {
     color: #94a3b8;
 }
 
+.empty-small {
+    padding: 14px 0;
+    color: #94a3b8;
+    font-size: 12px;
+    text-align: center;
+}
 
 /* TRIAJE */
-
 .triage-alert {
     border-radius: 8px;
     padding: 12px;
@@ -760,6 +1326,11 @@ tbody tr:last-child td {
     border-left: 3px solid #d97706;
 }
 
+.triage-verde {
+    background: #f0fdf4;
+    border-left: 3px solid #16a34a;
+}
+
 .triage-alert-top {
     display: flex;
     justify-content: space-between;
@@ -771,17 +1342,28 @@ tbody tr:last-child td {
     font-weight: 800;
 }
 
-.triage-rojo strong {
+.triage-rojo .triage-alert-top strong {
     color: #dc2626;
 }
 
-.triage-amarillo strong {
+.triage-amarillo .triage-alert-top strong {
     color: #b45309;
+}
+
+.triage-verde .triage-alert-top strong {
+    color: #15803d;
 }
 
 .triage-alert-top span {
     color: #94a3b8;
     font-size: 10px;
+}
+
+.triage-patient {
+    display: block;
+    margin-top: 7px;
+    color: #475569;
+    font-size: 11px;
 }
 
 .triage-alert p {
@@ -790,10 +1372,8 @@ tbody tr:last-child td {
     margin: 5px 0 0;
 }
 
-
-/* AVISO DE DATOS DE PRUEBA */
-
-.demo-notice {
+/* AVISO */
+.data-notice {
     margin-top: 22px;
     padding: 12px;
     border-radius: 8px;
@@ -802,11 +1382,8 @@ tbody tr:last-child td {
     font-size: 11px;
 }
 
-
 /* RESPONSIVE */
-
 @media (max-width: 1100px) {
-
     .indicators-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -814,12 +1391,9 @@ tbody tr:last-child td {
     .dashboard-content {
         grid-template-columns: 1fr;
     }
-
 }
 
-
 @media (max-width: 600px) {
-
     .dashboard {
         padding: 18px;
     }
@@ -840,7 +1414,5 @@ tbody tr:last-child td {
     .indicator-value {
         font-size: 25px;
     }
-
 }
-
 </style>

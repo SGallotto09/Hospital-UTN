@@ -1,29 +1,72 @@
-
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+
+// =====================================================
+// TIPOS
+// =====================================================
+
+type EstadoTurno =
+    | "Programado"
+    | "Confirmado"
+    | "En Sala de Espera"
+    | "Atendido"
+    | "Cancelado";
 
 interface Medico {
     id: number;
     nombre: string;
-    especialidad: string;
+    apellido: string;
+}
+
+interface Paciente {
+    id: number;
+    nombre: string;
+    apellido: string;
+    dni: string;
+}
+
+interface TurnoApi {
+    id: number;
+    idPaciente: number;
+    idMedico: number;
+    idRecepcionista: number;
+    fechaHoraInicio: string;
+    fechaHoraFin: string;
+    estado: EstadoTurno;
+    costo: number;
 }
 
 interface TurnoAgenda {
     id: number;
+    idPaciente: number;
     idMedico: number;
-    fecha: string;
     horaInicio: string;
     horaFin: string;
     paciente: string;
     dni: string;
-    motivo: string;
-    estado: "Programado" | "Confirmado" | "En Sala de Espera" | "Atendido" | "Cancelado";
+    estado: EstadoTurno;
 }
 
 interface IntervaloDisponible {
     inicio: string;
     fin: string;
 }
+
+interface RespuestaMedicos {
+    medicos: Medico[];
+}
+
+interface RespuestaPacientes {
+    pacientes: Paciente[];
+}
+
+interface RespuestaTurnos {
+    turnos: TurnoApi[];
+}
+
+// =====================================================
+// FECHAS Y HORARIOS
+// =====================================================
 
 function obtenerFechaLocal(fecha: Date): string {
     const anio = fecha.getFullYear();
@@ -34,150 +77,250 @@ function obtenerFechaLocal(fecha: Date): string {
 }
 
 function convertirHoraAMinutos(hora: string): number {
-    const partes = hora.split(":");
+    const [horas, minutos] = hora.split(":").map(Number);
 
-    const horas = Number(partes[0] ?? 0);
-    const minutos = Number(partes[1] ?? 0);
-
-    return horas * 60 + minutos;
+    return (horas ?? 0) * 60 + (minutos ?? 0);
 }
 
-function sumarMinutos(hora: string, minutos: number): string {
-    const total = convertirHoraAMinutos(hora) + minutos;
+function convertirMinutosAHora(minutos: number): string {
+    const horas = Math.floor(minutos / 60);
+    const resto = minutos % 60;
 
-    const nuevaHora = Math.floor(total / 60);
-    const nuevosMinutos = total % 60;
+    return `${String(horas).padStart(2, "0")}:${String(resto).padStart(2, "0")}`;
+}
 
-    return `${String(nuevaHora).padStart(2, "0")}:${String(nuevosMinutos).padStart(2, "0")}`;
+function formatoFecha(fecha: string): string {
+    if (!fecha) return "";
+
+    const [anio, mes, dia] = fecha.split("-");
+
+    return `${dia}/${mes}/${anio}`;
 }
 
 const fechaHoy = obtenerFechaLocal(new Date());
 
-const medicos = ref<Medico[]>([
-    {
-        id: 1,
-        nombre: "Dr. Silva",
-        especialidad: "Cardiología"
-    },
-    {
-        id: 2,
-        nombre: "Dra. Torres",
-        especialidad: "Pediatría"
-    },
-    {
-        id: 3,
-        nombre: "Dr. Pérez",
-        especialidad: "Clínica médica"
-    }
-]);
+// =====================================================
+// ESTADO DE LA VISTA
+// =====================================================
 
-const turnos = ref<TurnoAgenda[]>([
-    {
-        id: 1,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "08:00",
-        horaFin: "08:30",
-        paciente: "Carlos López",
-        dni: "35678901",
-        motivo: "Control cardiológico",
-        estado: "Confirmado"
-    },
-    {
-        id: 2,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "09:00",
-        horaFin: "09:30",
-        paciente: "Lucía Fernández",
-        dni: "42156890",
-        motivo: "Electrocardiograma",
-        estado: "Programado"
-    },
-    {
-        id: 3,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "10:00",
-        horaFin: "10:30",
-        paciente: "Martín Rodríguez",
-        dni: "33214567",
-        motivo: "Consulta general",
-        estado: "Confirmado"
-    },
-    {
-        id: 4,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "10:30",
-        horaFin: "11:00",
-        paciente: "Mariana Gómez",
-        dni: "39876543",
-        motivo: "Control periódico",
-        estado: "En Sala de Espera"
-    },
-    {
-        id: 5,
-        idMedico: 1,
-        fecha: fechaHoy,
-        horaInicio: "12:00",
-        horaFin: "12:30",
-        paciente: "Pedro Sánchez",
-        dni: "34567890",
-        motivo: "Primera consulta",
-        estado: "Cancelado"
-    },
-    {
-        id: 6,
-        idMedico: 2,
-        fecha: fechaHoy,
-        horaInicio: "08:00",
-        horaFin: "08:30",
-        paciente: "Sofía Ramírez",
-        dni: "44567890",
-        motivo: "Control pediátrico",
-        estado: "Confirmado"
-    },
-    {
-        id: 7,
-        idMedico: 2,
-        fecha: fechaHoy,
-        horaInicio: "09:00",
-        horaFin: "09:30",
-        paciente: "Mateo González",
-        dni: "45678901",
-        motivo: "Consulta general",
-        estado: "Programado"
-    },
-    {
-        id: 8,
-        idMedico: 3,
-        fecha: fechaHoy,
-        horaInicio: "08:30",
-        horaFin: "09:00",
-        paciente: "Ana Martínez",
-        dni: "36789012",
-        motivo: "Consulta clínica",
-        estado: "Confirmado"
-    }
-]);
+const medicos = ref<Medico[]>([]);
+const pacientes = ref<Paciente[]>([]);
+const turnos = ref<TurnoAgenda[]>([]);
 
-const medicoSeleccionado = ref(1);
+const cargando = ref(false);
+const cargandoAgenda = ref(false);
+const error = ref("");
+
 const fechaSeleccionada = ref(fechaHoy);
+const medicoSeleccionado = ref<number | null>(null);
+
+// Evita que una respuesta antigua sobrescriba una consulta más reciente.
+let solicitudAgendaActual = 0;
+
+// =====================================================
+// RESPUESTAS DE LA API
+// =====================================================
+
+function obtenerMensaje(datos: unknown): string | null {
+    if (
+        typeof datos === "object" &&
+        datos !== null &&
+        "mensaje" in datos &&
+        typeof datos.mensaje === "string"
+    ) {
+        return datos.mensaje;
+    }
+
+    return null;
+}
+
+async function obtenerJSON<T>(respuesta: Response): Promise<T> {
+    const datos: unknown = await respuesta.json().catch(() => null);
+
+    if (!respuesta.ok) {
+        throw new Error(
+            obtenerMensaje(datos) ??
+            `Error al consultar el servidor (${respuesta.status}).`
+        );
+    }
+
+    if (datos === null) {
+        throw new Error("El servidor devolvió una respuesta vacía.");
+    }
+
+    return datos as T;
+}
+
+// =====================================================
+// CONVERTIR TURNO DEL BACKEND
+// =====================================================
+
+function convertirTurno(turno: TurnoApi): TurnoAgenda {
+    const inicio = new Date(turno.fechaHoraInicio);
+    const fin = new Date(turno.fechaHoraFin);
+
+    if (
+        Number.isNaN(inicio.getTime()) ||
+        Number.isNaN(fin.getTime())
+    ) {
+        throw new Error(`El turno ${turno.id} tiene fechas inválidas.`);
+    }
+
+    const paciente = pacientes.value.find(
+        (item) => item.id === turno.idPaciente
+    );
+
+    return {
+        id: turno.id,
+        idPaciente: turno.idPaciente,
+        idMedico: turno.idMedico,
+        horaInicio: `${String(inicio.getHours()).padStart(2, "0")}:${String(inicio.getMinutes()).padStart(2, "0")}`,
+        horaFin: `${String(fin.getHours()).padStart(2, "0")}:${String(fin.getMinutes()).padStart(2, "0")}`,
+        paciente: paciente
+            ? `${paciente.apellido}, ${paciente.nombre}`
+            : "Paciente no encontrado",
+        dni: paciente?.dni ?? "—",
+        estado: turno.estado
+    };
+}
+
+// =====================================================
+// CARGAR MÉDICOS Y PACIENTES
+// =====================================================
+
+async function cargarDatos(): Promise<void> {
+    cargando.value = true;
+    error.value = "";
+
+    try {
+        const [respuestaMedicos, respuestaPacientes] = await Promise.all([
+            fetch("/api/admisiones/medicos", {
+                method: "GET",
+                credentials: "same-origin"
+            }),
+            fetch("/api/admisiones/pacientes", {
+                method: "GET",
+                credentials: "same-origin"
+            })
+        ]);
+
+        const [datosMedicos, datosPacientes] = await Promise.all([
+            obtenerJSON<RespuestaMedicos>(respuestaMedicos),
+            obtenerJSON<RespuestaPacientes>(respuestaPacientes)
+        ]);
+
+        if (
+            !Array.isArray(datosMedicos.medicos) ||
+            !Array.isArray(datosPacientes.pacientes)
+        ) {
+            throw new Error("El servidor devolvió información inválida.");
+        }
+
+        medicos.value = [...datosMedicos.medicos].sort((a, b) =>
+            a.apellido.localeCompare(b.apellido)
+        );
+        pacientes.value = datosPacientes.pacientes;
+
+        medicoSeleccionado.value = medicos.value[0]?.id ?? null;
+
+        if (medicoSeleccionado.value !== null) {
+            await cargarAgenda();
+        } else {
+            turnos.value = [];
+        }
+    } catch (err) {
+        error.value = err instanceof Error
+            ? err.message
+            : "No se pudieron cargar los datos de la agenda.";
+    } finally {
+        cargando.value = false;
+    }
+}
+
+// =====================================================
+// CARGAR AGENDA DEL MÉDICO Y FECHA SELECCIONADOS
+// =====================================================
+
+async function cargarAgenda(): Promise<void> {
+    const idMedico = medicoSeleccionado.value;
+    const fecha = fechaSeleccionada.value;
+    const numeroSolicitud = ++solicitudAgendaActual;
+
+    if (idMedico === null || !fecha) {
+        turnos.value = [];
+        cargandoAgenda.value = false;
+        return;
+    }
+
+    cargandoAgenda.value = true;
+    error.value = "";
+    turnos.value = [];
+
+    try {
+        const parametros = new URLSearchParams({
+            idMedico: String(idMedico),
+            fecha
+        });
+
+        const respuesta = await fetch(
+            `/api/admisiones/turnos/agenda?${parametros.toString()}`,
+            {
+                method: "GET",
+                credentials: "same-origin"
+            }
+        );
+
+        const datos = await obtenerJSON<RespuestaTurnos>(respuesta);
+
+        if (numeroSolicitud !== solicitudAgendaActual) return;
+
+        if (!Array.isArray(datos.turnos)) {
+            throw new Error("El servidor devolvió una agenda inválida.");
+        }
+
+        turnos.value = datos.turnos
+            .map(convertirTurno)
+            .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
+    } catch (err) {
+        if (numeroSolicitud === solicitudAgendaActual) {
+            turnos.value = [];
+            error.value = err instanceof Error
+                ? err.message
+                : "No se pudo cargar la agenda médica.";
+        }
+    } finally {
+        if (numeroSolicitud === solicitudAgendaActual) {
+            cargandoAgenda.value = false;
+        }
+    }
+}
+
+// =====================================================
+// NAVEGACIÓN ENTRE FECHAS
+// =====================================================
+
+function cambiarDia(cantidad: number): void {
+    const fecha = new Date(`${fechaSeleccionada.value}T12:00:00`);
+    fecha.setDate(fecha.getDate() + cantidad);
+    fechaSeleccionada.value = obtenerFechaLocal(fecha);
+
+    void cargarAgenda();
+}
+
+function seleccionarHoy(): void {
+    fechaSeleccionada.value = fechaHoy;
+    void cargarAgenda();
+}
+
+// =====================================================
+// DATOS CALCULADOS
+// =====================================================
 
 const medicoActual = computed(() =>
     medicos.value.find((medico) => medico.id === medicoSeleccionado.value)
 );
 
-const turnosDelDia = computed(() => {
-    return turnos.value
-        .filter(
-            (turno) =>
-                turno.idMedico === medicoSeleccionado.value &&
-                turno.fecha === fechaSeleccionada.value
-        )
-        .sort((a, b) => a.horaInicio.localeCompare(b.horaInicio));
-});
+const turnosDelDia = computed(() => turnos.value);
 
 const turnosActivos = computed(() =>
     turnosDelDia.value.filter((turno) => turno.estado !== "Cancelado")
@@ -191,37 +334,6 @@ const turnosConfirmados = computed(() =>
     ).length
 );
 
-const intervalosDisponibles = computed<IntervaloDisponible[]>(() => {
-    const intervalos: IntervaloDisponible[] = [];
-
-    // Horario de atención de ejemplo: de 08:00 a 17:00.
-    for (let minutos = 8 * 60; minutos < 17 * 60; minutos += 30) {
-        const horaInicio = `${String(Math.floor(minutos / 60)).padStart(2, "0")}:${String(minutos % 60).padStart(2, "0")}`;
-        const horaFin = sumarMinutos(horaInicio, 30);
-
-        const estaOcupado = turnosActivos.value.some(
-            (turno) =>
-                turno.horaInicio < horaFin &&
-                turno.horaFin > horaInicio
-        );
-
-        if (estaOcupado) continue;
-
-        const ultimoIntervalo = intervalos[intervalos.length - 1];
-
-        if (ultimoIntervalo && ultimoIntervalo.fin === horaInicio) {
-            ultimoIntervalo.fin = horaFin;
-        } else {
-            intervalos.push({
-                inicio: horaInicio,
-                fin: horaFin
-            });
-        }
-    }
-
-    return intervalos;
-});
-
 const duracionOcupada = computed(() =>
     turnosActivos.value.reduce((total, turno) => {
         const inicio = convertirHoraAMinutos(turno.horaInicio);
@@ -231,21 +343,54 @@ const duracionOcupada = computed(() =>
     }, 0)
 );
 
-function cambiarDia(cantidad: number) {
-    const fecha = new Date(`${fechaSeleccionada.value}T12:00:00`);
-    fecha.setDate(fecha.getDate() + cantidad);
-    fechaSeleccionada.value = obtenerFechaLocal(fecha);
-}
+// =====================================================
+// HORARIOS DISPONIBLES
+// =====================================================
 
-function formatoFecha(fecha: string): string {
-    if (!fecha) return "";
+const intervalosDisponibles = computed<IntervaloDisponible[]>(() => {
+    const intervalos: IntervaloDisponible[] = [];
+    const inicioJornada = 8 * 60;
+    const finJornada = 17 * 60;
+    const duracionTurno = 30;
 
-    const [anio, mes, dia] = fecha.split("-");
-    return `${dia}/${mes}/${anio}`;
-}
+    for (
+        let minutos = inicioJornada;
+        minutos + duracionTurno <= finJornada;
+        minutos += duracionTurno
+    ) {
+        const horaInicio = convertirMinutosAHora(minutos);
+        const horaFin = convertirMinutosAHora(minutos + duracionTurno);
 
-function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
-    const clases: Record<TurnoAgenda["estado"], string> = {
+        const estaOcupado = turnosActivos.value.some((turno) => {
+            const inicioOcupado = convertirHoraAMinutos(turno.horaInicio);
+            const finOcupado = convertirHoraAMinutos(turno.horaFin);
+
+            return (
+                inicioOcupado < minutos + duracionTurno &&
+                finOcupado > minutos
+            );
+        });
+
+        if (estaOcupado) continue;
+
+        const ultimoIntervalo = intervalos[intervalos.length - 1];
+
+        if (ultimoIntervalo && ultimoIntervalo.fin === horaInicio) {
+            ultimoIntervalo.fin = horaFin;
+        } else {
+            intervalos.push({ inicio: horaInicio, fin: horaFin });
+        }
+    }
+
+    return intervalos;
+});
+
+// =====================================================
+// ESTADOS Y DURACIONES
+// =====================================================
+
+function obtenerEstadoClase(estado: EstadoTurno): string {
+    const clases: Record<EstadoTurno, string> = {
         Programado: "programado",
         Confirmado: "confirmado",
         "En Sala de Espera": "en-espera",
@@ -255,6 +400,21 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
 
     return clases[estado];
 }
+
+function obtenerDuracion(turno: TurnoAgenda): number {
+    return (
+        convertirHoraAMinutos(turno.horaFin) -
+        convertirHoraAMinutos(turno.horaInicio)
+    );
+}
+
+// =====================================================
+// CARGA INICIAL
+// =====================================================
+
+onMounted(() => {
+    void cargarDatos();
+});
 </script>
 
 <template>
@@ -270,13 +430,21 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
         <section class="filters-card">
             <div class="filter-group">
                 <label for="medico">Profesional médico</label>
-                <select id="medico" v-model.number="medicoSeleccionado">
+                <select
+                    id="medico"
+                    v-model.number="medicoSeleccionado"
+                    :disabled="cargando || medicos.length === 0"
+                    @change="cargarAgenda"
+                >
+                    <option v-if="medicos.length === 0" :value="null" disabled>
+                        No hay médicos registrados
+                    </option>
                     <option
                         v-for="medico in medicos"
                         :key="medico.id"
                         :value="medico.id"
                     >
-                        {{ medico.nombre }} — {{ medico.especialidad }}
+                        {{ medico.apellido }}, {{ medico.nombre }}
                     </option>
                 </select>
             </div>
@@ -284,11 +452,24 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
             <div class="filter-group date-filter">
                 <label for="fecha">Fecha de consulta</label>
                 <div class="date-controls">
-                    <button type="button" @click="cambiarDia(-1)" aria-label="Día anterior">
+                    <button
+                        type="button"
+                        @click="cambiarDia(-1)"
+                        aria-label="Día anterior"
+                    >
                         ‹
                     </button>
-                    <input id="fecha" v-model="fechaSeleccionada" type="date" />
-                    <button type="button" @click="cambiarDia(1)" aria-label="Día siguiente">
+                    <input
+                        id="fecha"
+                        v-model="fechaSeleccionada"
+                        type="date"
+                        @change="cargarAgenda"
+                    />
+                    <button
+                        type="button"
+                        @click="cambiarDia(1)"
+                        aria-label="Día siguiente"
+                    >
                         ›
                     </button>
                 </div>
@@ -297,7 +478,7 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
             <button
                 type="button"
                 class="today-button"
-                @click="fechaSeleccionada = fechaHoy"
+                @click="seleccionarHoy"
             >
                 Hoy
             </button>
@@ -306,8 +487,11 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
         <section class="doctor-heading">
             <div class="doctor-avatar">MD</div>
             <div>
-                <h2>{{ medicoActual?.nombre }}</h2>
-                <p>{{ medicoActual?.especialidad }} · {{ formatoFecha(fechaSeleccionada) }}</p>
+                <h2 v-if="medicoActual">
+                    {{ medicoActual.apellido }}, {{ medicoActual.nombre }}
+                </h2>
+                <h2 v-else>Sin profesionales registrados</h2>
+                <p>Agenda del profesional · {{ formatoFecha(fechaSeleccionada) }}</p>
             </div>
         </section>
 
@@ -326,7 +510,7 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
                 <div>
                     <span>Confirmados / en espera</span>
                     <strong>{{ turnosConfirmados }}</strong>
-                    <small>Pacientes con asistencia confirmada o en sala</small>
+                    <small>Pacientes confirmados o en sala</small>
                 </div>
             </article>
 
@@ -335,7 +519,7 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
                 <div>
                     <span>Tiempo ocupado</span>
                     <strong>{{ duracionOcupada }} min</strong>
-                    <small>Sobre el horario de atención</small>
+                    <small>Sobre el horario de referencia</small>
                 </div>
             </article>
         </section>
@@ -350,7 +534,15 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
                     <span class="result-count">{{ turnosDelDia.length }} registros</span>
                 </div>
 
-                <div v-if="turnosDelDia.length > 0" class="appointments-list">
+                <div v-if="cargando || cargandoAgenda" class="empty-state">
+                    <strong>Cargando agenda médica...</strong>
+                </div>
+
+                <div v-else-if="error" class="empty-state">
+                    <strong>{{ error }}</strong>
+                </div>
+
+                <div v-else-if="turnosDelDia.length > 0" class="appointments-list">
                     <article
                         v-for="turno in turnosDelDia"
                         :key="turno.id"
@@ -364,19 +556,17 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
 
                         <div class="appointment-details">
                             <strong>{{ turno.paciente }}</strong>
-                            <span>DNI {{ turno.dni }} · {{ turno.motivo }}</span>
+                            <span>DNI {{ turno.dni }}</span>
                         </div>
 
                         <div class="appointment-duration">
-                            {{ (
-                                (Number(turno.horaFin.slice(0, 2)) * 60 +
-                                    Number(turno.horaFin.slice(3, 5))) -
-                                (Number(turno.horaInicio.slice(0, 2)) * 60 +
-                                    Number(turno.horaInicio.slice(3, 5)))
-                            ) }} min
+                            {{ obtenerDuracion(turno) }} min
                         </div>
 
-                        <span class="status-badge" :class="obtenerEstadoClase(turno.estado)">
+                        <span
+                            class="status-badge"
+                            :class="obtenerEstadoClase(turno.estado)"
+                        >
                             {{ turno.estado }}
                         </span>
                     </article>
@@ -397,7 +587,14 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
                     </div>
                 </div>
 
-                <div v-if="intervalosDisponibles.length > 0" class="availability-list">
+                <div v-if="cargando || cargandoAgenda" class="empty-availability">
+                    Consultando disponibilidad...
+                </div>
+
+                <div
+                    v-else-if="intervalosDisponibles.length > 0"
+                    class="availability-list"
+                >
                     <div
                         v-for="(intervalo, indice) in intervalosDisponibles"
                         :key="indice"
@@ -411,11 +608,11 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
 
                 <div v-else class="empty-availability">
                     <strong>Sin intervalos disponibles</strong>
-                    <p>No se encontraron horarios libres en la jornada configurada.</p>
+                    <p>No se encontraron horarios libres en la jornada de referencia.</p>
                 </div>
 
                 <div class="availability-note">
-                    <strong>Horario de atención</strong>
+                    <strong>Horario de referencia</strong>
                     <span>08:00 a 17:00</span>
                 </div>
             </aside>
@@ -492,6 +689,11 @@ function obtenerEstadoClase(estado: TurnoAgenda["estado"]): string {
     color: #344255;
     font: inherit;
     font-size: 13px;
+}
+
+.filter-group select:disabled {
+    cursor: not-allowed;
+    background: #f7f9fc;
 }
 
 .date-controls {

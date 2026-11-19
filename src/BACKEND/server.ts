@@ -92,6 +92,8 @@ import { RegistrarTriaje } from "./modules/admicion-turnos/application/use-cases
 
 import { TriajeController } from "./modules/admicion-turnos/infraestructure/api/TriajeController.js";
 import { TriajeRoutes } from "./modules/admicion-turnos/infraestructure/api/TriajeRoutes.js";
+import { ListarTriajes } from "./modules/admicion-turnos/application/use-cases/triaje/ListarTriajes.js";
+import { CambiarEstadoTriaje } from "./modules/admicion-turnos/application/use-cases/triaje/CambiarEstadoTriaje.js";
 
 // ==========================================
 // FACTURACIÓN Y ADMINISTRACIÓN
@@ -416,8 +418,18 @@ const registrarTriaje = new RegistrarTriaje(
     notificacionService
 );
 
+const listarTriajes = new ListarTriajes(
+    triajeRepository
+);
+
+const cambiarEstadoTriaje = new CambiarEstadoTriaje(
+    triajeRepository
+);
+
 const triajeController = new TriajeController(
-    registrarTriaje
+    registrarTriaje,
+    listarTriajes,
+    cambiarEstadoTriaje
 );
 
 const triajeRoutes = new TriajeRoutes(
