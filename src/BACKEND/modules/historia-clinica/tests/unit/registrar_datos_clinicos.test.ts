@@ -40,7 +40,7 @@ describe('Validación de registros clínicos antes de persistir', () => {
         { fecha_deteccion: new Date('inválida') },
     ])('rechaza alergia inválida %j sin llamar a MySQL', async (cambio) => {
         const guardar = vi.fn();
-        const caso = new RegistrarAlergia({ guardar, obtenerPorPaciente: vi.fn() });
+        const caso = new RegistrarAlergia({ guardar, rectificar: vi.fn() });
         await expect(
             caso.ejecutar({ ...alergia, ...cambio } as typeof alergia),
         ).rejects.toBeInstanceOf(TypeError);
@@ -80,7 +80,7 @@ describe('Validación de registros clínicos antes de persistir', () => {
 
     it('normaliza los campos y conserva al paciente y al médico', async () => {
         const guardar = vi.fn().mockResolvedValue({ id: 9 });
-        const repo = { guardar, obtenerPorPaciente: vi.fn() };
+        const repo = { guardar, obtenerPorPaciente: vi.fn(), rectificar: vi.fn() };
         await new RegistrarAlergia(repo).ejecutar(alergia);
         expect(guardar).toHaveBeenLastCalledWith({
             ...alergia,

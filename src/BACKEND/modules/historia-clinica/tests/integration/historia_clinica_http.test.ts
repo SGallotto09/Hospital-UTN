@@ -28,6 +28,17 @@ describe('Historia Clínica: HTTP, IAM y adaptadores reales con MySQL simulado',
     let cookieEnfermero: string;
     let cookieAdministrador: string;
     let cookieRecepcionista: string;
+    const rectificacion = {
+        id_paciente: 1,
+        id_medico: 999,
+        sustancia: 'Penicilina',
+        reaccion: 'Erupción',
+        gravedad: 'leve',
+        estado: 'descartada',
+        fecha_deteccion: '2026-11-16',
+        motivo: '  Antecedente reevaluado  ',
+    };
+    const rutaRectificacion = '/alergias/5/rectificaciones';
 
     async function sesion(rol: string) {
         const respuesta = await fetch(url + '/sesion-prueba', {
@@ -242,5 +253,77 @@ describe('Historia Clínica: HTTP, IAM y adaptadores reales con MySQL simulado',
             ).status,
         ).toBe(404);
         expect(mocks.execute).not.toHaveBeenCalled();
+    });
+
+    it('rectifica mediante una transacción que agrega la versión y el vínculo sin editar la anterior', async () => {
+        const anterior = { id: 5, estado: 'activa', id_alergia_nueva: 9, id_alergia_anterior: null };
+        const nueva = {
+            id: 9,
+            estado: 'descartada',
+            id_medico: 3,
+            fecha_registro: '2026-11-19T12:00:00.000Z',
+        };
+        mocks.execute
+            .mockResolvedValueOnce([[anterior], []])
+            .mockResolvedValueOnce([[], []])
+            .mockResolvedValueOnce([{ insertId: 9 }, []])
+            .mockResolvedValueOnce([[nueva], []])
+            .mockResolvedValueOnce([{}, []]);
+
+        const respuesta = await peticion(rutaRectificacion, cookieMedico, rectificacion);
+        expect(respuesta.status).toBe(201);
+        expect(await respuesta.json()).toEqual(nueva);
+        expect(mocks.transaccion).toHaveBeenCalledTimes(1);
+        expect(mocks.execute).toHaveBeenCalledTimes(5);
+        expect(mocks.execute).toHaveBeenNthCalledWith(
+            1,
+            expect.stringContaining('id_paciente = ? FOR UPDATE'),
+            [5, 1],
+        );
+        expect(mocks.execute).toHaveBeenNthCalledWith(
+            3,
+            expect.stringContaining('INSERT INTO alergias'),
+            [1, 'Penicilina', 'Erupción', 'leve', expect.any(Date), 'descartada', 3],
+        );
+        expect(mocks.execute).toHaveBeenNthCalledWith(
+            5,
+            expect.stringContaining('INSERT INTO alergia_rectificaciones'),
+            [5, 9, 'Antecedente reevaluado'],
+        );
+
+        const versiones = [
+            { ...nueva, id_alergia_anterior: 5, id_alergia_nueva: null, motivo: 'Antecedente reevaluado' },
+            anterior,
+        ];
+        mocks.query.mockResolvedValueOnce([versiones, []]);
+        const historial = await peticion('/alergias/paciente/1/rectificaciones', cookieEnfermero);
+        expect(historial.status).toBe(200);
+        expect(await historial.json()).toEqual(versiones);
+        expect(mocks.query).toHaveBeenCalledWith(
+            expect.stringContaining('LEFT JOIN alergia_rectificaciones'),
+            [1],
+        );
+    });
+
+    it('rechaza rectificaciones sin sesión, sin rol Médico o con motivo vacío antes de escribir', async () => {
+        expect((await peticion(rutaRectificacion, undefined, rectificacion)).status).toBe(401);
+        expect((await peticion(rutaRectificacion, cookieEnfermero, rectificacion)).status).toBe(403);
+        expect((await peticion(rutaRectificacion, cookieAdministrador, rectificacion)).status).toBe(403);
+        expect(
+            (await peticion(rutaRectificacion, cookieMedico, { ...rectificacion, motivo: ' ' })).status,
+        ).toBe(400);
+        expect(mocks.transaccion).not.toHaveBeenCalled();
+    });
+
+    it('rechaza versiones de otro paciente y versiones ya reemplazadas antes de insertar', async () => {
+        mocks.execute.mockResolvedValueOnce([[], []]);
+        expect((await peticion(rutaRectificacion, cookieMedico, rectificacion)).status).toBe(404);
+        expect(mocks.execute).toHaveBeenCalledTimes(1);
+
+        mocks.execute
+            .mockResolvedValueOnce([[{ id: 5 }], []])
+            .mockResolvedValueOnce([[{ id_alergia_nueva: 9 }], []]);
+        expect((await peticion(rutaRectificacion, cookieMedico, rectificacion)).status).toBe(409);
+        expect(mocks.execute).toHaveBeenCalledTimes(3);
     });
 });

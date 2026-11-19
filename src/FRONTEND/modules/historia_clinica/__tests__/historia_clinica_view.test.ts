@@ -33,6 +33,7 @@ describe('Historia Clínica conectada a la API', () => {
             if (url.endsWith('/sesion')) return json({ puedeRegistrar: true });
             if (url.endsWith('/pacientes')) return json([paciente]);
             if (opciones?.method === 'POST') return json({ id: 9 }, 201);
+            if (url.endsWith('/rectificaciones')) return json([]);
             return json(historia);
         });
         vi.stubGlobal('fetch', fetchMock);
@@ -116,6 +117,70 @@ describe('Historia Clínica conectada a la API', () => {
         expect(wrapper.get('[role="alert"]').text()).toContain('Dato inválido');
         expect(wrapper.findAll('form')).toHaveLength(3);
         expect(form.get('input').element.value).toBe('Control');
+    });
+    it('rectifica una versión vigente y muestra el historial devuelto tras guardar', async () => {
+        const original = {
+            id: 5,
+            sustancia: 'Penicilina',
+            reaccion: 'Erupción',
+            gravedad: 'leve',
+            estado: 'activa',
+            fecha_deteccion: '2026-11-16T03:00:00.000Z',
+            fecha_deteccion_calendario: '2026-11-16',
+            fecha_registro: '2026-11-17T12:00:00.000Z',
+            autor: 'Profesional inicial',
+        };
+        let guardada = false;
+        fetchMock.mockImplementation(async (url: string, opciones?: RequestInit) => {
+            if (url.endsWith('/sesion')) return json({ puedeRegistrar: true });
+            if (url.endsWith('/pacientes')) return json([paciente]);
+            if (opciones?.method === 'POST') {
+                guardada = true;
+                return json({ id: 9 }, 201);
+            }
+            if (url.endsWith('/rectificaciones')) {
+                return json(guardada ? [
+                    {
+                        ...original,
+                        id: 9,
+                        estado: 'descartada',
+                        autor: 'Profesional de sesión',
+                        id_alergia_anterior: 5,
+                        motivo: 'Antecedente reevaluado',
+                    },
+                    { ...original, id_alergia_nueva: 9 },
+                ] : [original]);
+            }
+            return json({ ...historia, alergias: [original] });
+        });
+
+        montar();
+        await flushPromises();
+        await wrapper.get('#alergias article button').trigger('click');
+        const form = wrapper.get('#alergias form');
+        expect(form.get<HTMLInputElement>('input[type="date"]').element.value).toBe('2026-11-16');
+        await form.findAll('select')[1]!.setValue('descartada');
+        await form.get('textarea').setValue('Antecedente reevaluado');
+        await form.trigger('submit');
+        await flushPromises();
+
+        const [url, opciones] = fetchMock.mock.calls.find(([, init]) => init.method === 'POST')!;
+        expect(url).toBe('/api/historia-clinica/alergias/5/rectificaciones');
+        expect(JSON.parse(opciones.body)).toEqual({
+            id_paciente: 7,
+            sustancia: 'Penicilina',
+            reaccion: 'Erupción',
+            gravedad: 'leve',
+            fecha_deteccion: '2026-11-16',
+            estado: 'descartada',
+            motivo: 'Antecedente reevaluado',
+        });
+        expect(wrapper.findAll('#alergias article')).toHaveLength(2);
+        expect(wrapper.findAll('#alergias article button')).toHaveLength(1);
+        expect(wrapper.text()).toContain('Versión #5 reemplazada por #9');
+        expect(wrapper.text()).toContain('Profesional de sesión');
+        expect(wrapper.text()).toContain('Antecedente reevaluado');
+        expect(wrapper.text()).toContain('No hay alergias activas registradas.');
     });
     it('descarta la respuesta clínica anterior cuando cambia el paciente', async () => {
         let resolver!: (respuesta: Response) => void;

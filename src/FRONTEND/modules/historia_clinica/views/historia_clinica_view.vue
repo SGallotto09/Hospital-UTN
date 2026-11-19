@@ -22,6 +22,10 @@ interface Alergia {
     fecha_deteccion: string;
     fecha_registro: string;
     autor: string;
+    id_alergia_anterior?: number | null;
+    id_alergia_nueva?: number | null;
+    motivo?: string | null;
+    fecha_deteccion_calendario?: string;
 }
 interface Antecedente {
     id: number;
@@ -77,6 +81,17 @@ const error = ref('');
 const mensaje = ref('');
 let solicitud = 0;
 const nuevaAlergia = ref({ sustancia: '', reaccion: '', gravedad: 'leve', fecha_deteccion: '' });
+const rectificacion = ref<(typeof nuevaAlergia.value & {
+    id: number;
+    estado: string;
+    motivo: string;
+}) | null>(null);
+const formularioAlergia = computed(() => rectificacion.value ?? nuevaAlergia.value);
+const historialAlergiasDisponible = ref(false);
+const errorHistorialAlergias = ref(false);
+const alergiasActivas = computed(() =>
+    alergiasPaciente.value.filter((a) => a.estado === 'activa' && !a.id_alergia_nueva),
+);
 const nuevoAntecedente = ref({ parentesco: '', condicion: '', observaciones: '' });
 const nuevaEvolucion = ref({ diagnostico: '', descripcion: '' });
 
@@ -105,6 +120,9 @@ function formatearFecha(valor: string) {
 function vaciarHistoria() {
     historiaDisponible.value = false;
     alergiasPaciente.value = [];
+    rectificacion.value = null;
+    historialAlergiasDisponible.value = false;
+    errorHistorialAlergias.value = false;
     antecedentesPaciente.value = [];
     evolucionesPaciente.value = [];
     estudiosPaciente.value = [];
@@ -128,12 +146,26 @@ async function seleccionarPaciente(paciente: Paciente) {
         evolucionesPaciente.value = historia.evolucionesMedicas;
         estudiosPaciente.value = historia.estudiosClinicos;
         historiaDisponible.value = true;
+        void cargarHistorialAlergias(paciente.id, actual);
     } catch (fallo) {
         if (actual === solicitud)
             error.value =
                 fallo instanceof Error ? fallo.message : 'No se pudo conectar con el servidor.';
     } finally {
         if (actual === solicitud) cargandoHistoria.value = false;
+    }
+}
+async function cargarHistorialAlergias(idPaciente: number, actual: number) {
+    try {
+        const versiones: Alergia[] = await consultar(
+            '/alergias/paciente/' + idPaciente + '/rectificaciones',
+        );
+        if (!Array.isArray(versiones)) throw new Error('Historial de alergias inválido.');
+        if (actual !== solicitud) return;
+        alergiasPaciente.value = versiones;
+        historialAlergiasDisponible.value = true;
+    } catch {
+        if (actual === solicitud) errorHistorialAlergias.value = true;
     }
 }
 async function guardarRegistro(ruta: string, datos: object) {
@@ -161,7 +193,22 @@ async function guardarRegistro(ruta: string, datos: object) {
     }
 }
 function registrarAlergia() {
+    if (rectificacion.value) {
+        const { id, ...datos } = rectificacion.value;
+        return guardarRegistro('/alergias/' + id + '/rectificaciones', datos);
+    }
     return guardarRegistro('/alergias', nuevaAlergia.value);
+}
+function prepararRectificacion(alergia: Alergia) {
+    rectificacion.value = {
+        id: alergia.id,
+        sustancia: alergia.sustancia,
+        reaccion: alergia.reaccion,
+        gravedad: alergia.gravedad,
+        fecha_deteccion: alergia.fecha_deteccion_calendario ?? alergia.fecha_deteccion.slice(0, 10),
+        estado: alergia.estado,
+        motivo: '',
+    };
 }
 function registrarAntecedente() {
     return guardarRegistro('/antecedentes', {
@@ -366,7 +413,7 @@ onMounted(async () => {
                     </div>
 
                     <span class="count">
-                        {{ alergiasPaciente.filter(a => a.estado === 'activa').length }}
+                        {{ alergiasActivas.length }}
                         activas
                     </span>
                 </div>
@@ -374,7 +421,7 @@ onMounted(async () => {
                 <div class="clinical-card">
 
                     <div
-                        v-if="alergiasPaciente.filter(a => a.estado === 'activa').length === 0"
+                        v-if="alergiasActivas.length === 0"
                         class="empty"
                     >
                         No hay alergias activas registradas.
@@ -384,7 +431,7 @@ onMounted(async () => {
                         v-for="alergia in alergiasPaciente"
                         :key="alergia.id"
                         class="record-row"
-                        :class="{ inactive: alergia.estado === 'descartada' }"
+                        :class="{ inactive: alergia.estado === 'descartada' || alergia.id_alergia_nueva }"
                     >
                         <div class="record-icon allergy-icon">
                             !
@@ -414,12 +461,33 @@ onMounted(async () => {
                                 · {{ formatearFecha(alergia.fecha_deteccion) }}
                                 · {{ alergia.autor }}
                             </span>
+                            <p v-if="alergia.id_alergia_nueva">
+                                Versión #{{ alergia.id }} reemplazada por #{{ alergia.id_alergia_nueva }}.
+                            </p>
+                            <p v-if="alergia.id_alergia_anterior">
+                                Versión #{{ alergia.id }} ·
+                                <span v-if="!alergia.id_alergia_nueva">Vigente · </span>
+                                Rectifica #{{ alergia.id_alergia_anterior }} ·
+                                {{ new Date(alergia.fecha_registro).toLocaleString('es-AR') }}
+                                · Motivo: {{ alergia.motivo }}
+                            </p>
+                            <button
+                                v-if="puedeRegistrar && historialAlergiasDisponible && !alergia.id_alergia_nueva"
+                                type="button"
+                                :disabled="guardando"
+                                @click="prepararRectificacion(alergia)"
+                            >
+                                Rectificar
+                            </button>
                         </div>
                     </article>
 
                     <div v-if="puedeRegistrar" class="form-divider"></div>
 
-                    <h3 v-if="puedeRegistrar">Registrar nueva alergia</h3>
+                    <p v-if="errorHistorialAlergias" role="status">No se pudo consultar el historial de rectificaciones.</p>
+                    <h3 v-if="puedeRegistrar">
+                        {{ rectificacion ? 'Rectificar alergia #' + rectificacion.id : 'Registrar nueva alergia' }}
+                    </h3>
 
                     <form v-if="puedeRegistrar" @submit.prevent="registrarAlergia">
                         <fieldset :disabled="guardando || cargandoHistoria">
@@ -430,7 +498,7 @@ onMounted(async () => {
                                 <label>Sustancia o agente</label>
 
                                 <input
-                                    v-model="nuevaAlergia.sustancia"
+                                    v-model="formularioAlergia.sustancia"
                                     type="text"
                                     placeholder="Ej. Penicilina"
                                     required
@@ -441,7 +509,7 @@ onMounted(async () => {
                                 <label>Tipo de reacción</label>
 
                                 <input
-                                    v-model="nuevaAlergia.reaccion"
+                                    v-model="formularioAlergia.reaccion"
                                     type="text"
                                     placeholder="Ej. Erupción cutánea"
                                     required
@@ -450,12 +518,12 @@ onMounted(async () => {
 
                             <div class="form-group">
                                 <label>Fecha de deteccion</label>
-                                <input v-model="nuevaAlergia.fecha_deteccion" type="date" required />
+                                <input v-model="formularioAlergia.fecha_deteccion" type="date" required />
                             </div>
                             <div class="form-group">
                                 <label>Gravedad</label>
 
-                                <select v-model="nuevaAlergia.gravedad">
+                                <select v-model="formularioAlergia.gravedad">
                                     <option value="leve">Leve</option>
                                     <option value="moderada">Moderada</option>
                                     <option value="grave">Grave</option>
@@ -464,9 +532,25 @@ onMounted(async () => {
 
                         </div>
 
+                        <div v-if="rectificacion" class="form-grid">
+                            <label class="form-group">
+                                Estado
+                                <select v-model="rectificacion.estado">
+                                    <option value="activa">Activa</option>
+                                    <option value="descartada">Descartada</option>
+                                </select>
+                            </label>
+                            <label class="form-group">
+                                Motivo de rectificación
+                                <textarea v-model="rectificacion.motivo" maxlength="500" required></textarea>
+                            </label>
+                        </div>
                         <div class="form-actions">
+                            <button v-if="rectificacion" type="button" @click="rectificacion = null">
+                                Cancelar
+                            </button>
                             <button class="primary-button" type="submit">
-                                + Registrar alergia
+                                {{ rectificacion ? 'Guardar rectificación' : '+ Registrar alergia' }}
                             </button>
                         </div>
 

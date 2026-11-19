@@ -6,9 +6,22 @@ import type {
 import type { Alergia } from '../domain/entities/alergia.js';
 
 export class RegistrarAlergia {
-    constructor(private readonly alergiaRepository: AlergiaRepository) {}
+    constructor(private readonly alergiaRepository: Pick<AlergiaRepository, 'guardar' | 'rectificar'>) {}
 
     async ejecutar(datos: DatosNuevaAlergia): Promise<Alergia> {
+        return this.alergiaRepository.guardar(this.validar(datos));
+    }
+
+    async rectificar(idAnterior: number, datos: DatosNuevaAlergia, motivo: unknown) {
+        if (!Number.isSafeInteger(idAnterior) || idAnterior <= 0)
+            throw new TypeError('El ID de la alergia no es válido');
+        if (typeof motivo !== 'string' || !motivo.trim() || motivo.trim().length > 500)
+            throw new TypeError('El motivo de rectificación debe tener entre 1 y 500 caracteres.');
+
+        return this.alergiaRepository.rectificar(idAnterior, this.validar(datos), motivo.trim());
+    }
+
+    private validar(datos: DatosNuevaAlergia): DatosNuevaAlergia {
         if (!Number.isSafeInteger(datos.id_paciente) || datos.id_paciente <= 0) {
             throw new TypeError('El ID del paciente no es válido');
         }
@@ -45,10 +58,10 @@ export class RegistrarAlergia {
         if (typeof datos.reaccion === 'string' && datos.reaccion.length > 200)
             throw new TypeError('El campo reaccion supera el limite permitido.');
 
-        return this.alergiaRepository.guardar({
+        return {
             ...datos,
             sustancia: datos.sustancia.trim(),
             reaccion: datos.reaccion.trim(),
-        });
+        };
     }
 }

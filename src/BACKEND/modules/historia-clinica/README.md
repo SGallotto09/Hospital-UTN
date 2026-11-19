@@ -35,6 +35,8 @@ Prefijo: `/api/historia-clinica`.
 | GET | `/antecedentes/paciente/:idPaciente` | Antecedentes familiares |
 | GET | `/evoluciones/paciente/:idPaciente` | Evoluciones |
 | POST | `/alergias` | Registra `id_paciente`, `sustancia`, `reaccion`, `gravedad`, `fecha_deteccion` (YYYY-MM-DD); estado inicial activa |
+| POST | `/alergias/:idAlergia/rectificaciones` | Sólo Médico. Recibe los campos del alta, `estado` y `motivo` obligatorio. Devuelve 409 si la versión ya fue reemplazada |
+| GET | `/alergias/paciente/:idPaciente/rectificaciones` | Devuelve todas las versiones y los vínculos. Una versión sin `id_alergia_nueva` es vigente |
 | POST | `/antecedentes` | Registra `id_paciente`, `parentesco`, `enfermedad`, `observaciones` opcionales |
 | POST | `/evoluciones` | Registra `id_paciente`, `descripcion`, `diagnostico` |
 
@@ -48,14 +50,15 @@ exponen errores SQL ni se registran datos clínicos en logs.
 
 Se verificaron mediante SELECT las tablas `pacientes`, `usuarios`, `alergias`,
 `antecedentes_familiares`, `evoluciones_medicas` y `estudios_clinicos`, sus columnas
-y claves foráneas. No se requieren migraciones ni cambios en la conexión.
+y claves foráneas. Para habilitar HCE-1, ejecutar
+[`001_alergia_rectificaciones.sql`](infraestructure/migrations/001_alergia_rectificaciones.sql)
+en la base MySQL configurada antes de desplegar la API.
 
 - Estudios: sólo consulta, como en la versión de referencia; no había formulario
   de alta ni se añadió uno fuera del alcance.
-- Corrección de alergias: la referencia sólo agregaba una copia en memoria.
-  No se habilita esa simulación. El esquema no tiene vínculo al registro corregido,
-  motivo ni una operación de rectificación auditable acordada. El grupo debe
-  definirla antes de habilitar correcciones; no se sobrescriben registros originales.
+- La rectificación agrega una versión y su vínculo con motivo en una sola
+  transacción. La versión nueva registra el médico de sesión y la fecha y hora
+  asignada por MySQL, y la versión anterior conserva sus datos.
 - El esquema no contiene domicilio, número de afiliado ni número de historia
   clínica independiente. Se muestran datos existentes y el ID del paciente, sin
   inventar esos valores.

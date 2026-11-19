@@ -60,6 +60,29 @@ describe('Registros clínicos con withTransaction real y conexión MySQL simulad
             .mockResolvedValueOnce([{ insertId: 9 }, []])
             .mockResolvedValueOnce([[{ id: 9 }], []]);
     });
+    it('revierte la versión nueva si falla la escritura del vínculo de rectificación', async () => {
+        conexion.execute.mockReset();
+        conexion.execute
+            .mockResolvedValueOnce([[{ id: 5 }], []])
+            .mockResolvedValueOnce([[], []])
+            .mockResolvedValueOnce([{ insertId: 9 }, []])
+            .mockResolvedValueOnce([[{ id: 9 }], []])
+            .mockRejectedValueOnce(new Error('Vínculo fallido'));
+
+        await expect(
+            new AlergiaRepositoryMySQL().rectificar(5, {
+                id_paciente: 1,
+                id_medico: 3,
+                sustancia: 'Penicilina',
+                reaccion: 'Erupción',
+                gravedad: 'leve',
+                estado: 'descartada',
+                fecha_deteccion: new Date('2026-11-16T00:00:00'),
+            }, 'Antecedente reevaluado'),
+        ).rejects.toThrow('Vínculo fallido');
+        expect(conexion.rollback).toHaveBeenCalledOnce();
+        expect(conexion.commit).not.toHaveBeenCalled();
+    });
     for (const { nombre, guardar } of registros) {
         it(`${nombre}: confirma inserción y lectura en la misma conexión`, async () => {
             expect(await guardar()).toEqual({ id: 9 });
