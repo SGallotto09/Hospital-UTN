@@ -36,6 +36,8 @@ const boton = (wrapper: ReturnType<typeof mount>, texto: string) =>
   wrapper.findAll('button').find((b) => b.text() === texto)!
 function crearApi(inicial: Cama = cama): CamasApi {
   return {
+    crear: vi.fn(),
+    listarTipos: vi.fn(),
     listar: vi.fn().mockResolvedValue([inicial]),
     asignar: vi.fn(),
     buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),

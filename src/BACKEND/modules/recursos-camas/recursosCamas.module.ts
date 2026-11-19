@@ -14,6 +14,8 @@ import type { RegistroConsumosMysql } from './infraestructure/database/RegistroC
 import { InventarioController } from './presentation/controlers/InventarioController.js'
 import { ProcesarConsumoInsumo } from './application/use-cases/ProcesarConsumoInsumo.js'
 import type { ConsumidorMedicacionAdministrada } from './application/ports/MedicacionAdministrada.js'
+import { MysqlCamaRepository } from './infraestructure/repositories/MysqlCamaRepository.js'
+import { RegistrarCama } from './application/use-cases/RegistrarCama.js'
 
 export interface DependenciasRecursosCamas {
   database: Pick<Database, 'query'>
@@ -59,13 +61,15 @@ export function crearModuloLecturaRecursosCamas(
 // Se monta en /api/recursos-camas desde el arranque compartido.
 // No crea conexiones ni reemplaza silenciosamente el proveedor transaccional faltante.
 export function crearModuloRecursosCamas(deps: DependenciasRecursosCamas) {
+  const catalogoCamas = new MysqlCamaRepository(new ConsultaMysqlCompartida(deps.database))
   const consultaCamas = new MysqlConsultaCamas(new ConsultaMysqlCompartida(deps.database))
   const asignar = deps.pacientes
     ? new AsignarCama(new MysqlAsignacionCamaRepository(deps.transacciones), deps.pacientes)
     : undefined
   const transicionar = new TransicionarCama(new MysqlTransicionCamaRepository(deps.transacciones))
   return crearRecursosCamasRouter(
-    new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar, deps.pacientes),
+    new CamasController(consultaCamas, asignar, deps.obtenerActor, transicionar, deps.pacientes,
+      new RegistrarCama(catalogoCamas), catalogoCamas),
     new InventarioController(crearRepositorioInsumos(deps), deps.obtenerActor),
     false,
     !!deps.pacientes,

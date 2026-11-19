@@ -29,6 +29,8 @@ const asignacion = {
 
 function crearApi(): CamasApi {
   return {
+    crear: vi.fn(),
+    listarTipos: vi.fn(),
     listar: vi.fn().mockResolvedValue([cama]),
     asignar: vi.fn().mockResolvedValue(asignacion),
     buscarPacientePorDni: vi.fn().mockResolvedValue({ id: 8, nombre: 'Ana', apellido: 'Prueba', dni: '12345678' }),

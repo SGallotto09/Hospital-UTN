@@ -12,6 +12,7 @@ import { ErrorRecursosCamas, type CodigoError } from '../../domain/errors/ErrorR
 const estadosHttp: Record<CodigoError, number> = {
   DATOS_INVALIDOS: 400,
   CAMA_NO_ENCONTRADA: 404,
+  CAMA_DUPLICADA: 409,
   PACIENTE_NO_ENCONTRADO: 404,
   PACIENTE_YA_ASIGNADO: 409,
   CAMA_NO_DISPONIBLE: 409,
@@ -49,6 +50,8 @@ export function crearRecursosCamasRouter(
   router.get('/camas', controller.listar)
   router.get('/insumos', inventario.listar)
   if (!soloLectura) {
+    router.get('/tipos-cama', controller.listarTipos)
+    router.post('/camas', controller.crear)
     if (permitirAsignacion) {
       router.get('/pacientes', controller.buscarPaciente)
       router.post('/asignaciones', controller.asignar)

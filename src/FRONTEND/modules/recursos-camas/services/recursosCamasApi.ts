@@ -41,10 +41,23 @@ export interface PacienteParaAsignacion {
 }
 
 export interface CamasApi {
+  crear(datos: NuevaCama): Promise<{ id: number }>
+  listarTipos(): Promise<TipoCama[]>
   buscarPacientePorDni(dni: string): Promise<PacienteParaAsignacion>
   listar(): Promise<Cama[]>
   asignar(idCama: number, idPaciente: number): Promise<Asignacion>
   transicionar(idCama: number, solicitud: SolicitudTransicion): Promise<ResultadoTransicion>
+}
+
+export interface NuevaCama {
+  habitacion: number
+  piso: number
+  idTipoCama: number
+}
+
+export interface TipoCama {
+  id: number
+  nombre: string
 }
 
 export interface Insumo {
@@ -117,6 +130,14 @@ export function crearCamasApi(
   solicitar: typeof fetch = (...args) => fetch(...args),
 ): CamasApi {
   return {
+    async crear(datos) {
+      return (await enviar<{ cama: { id: number } }>(`${baseUrl}/camas`, solicitar, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos),
+      })).cama
+    },
+    async listarTipos() {
+      return (await enviar<{ tipos: TipoCama[] }>(`${baseUrl}/tipos-cama`, solicitar)).tipos
+    },
     async buscarPacientePorDni(dni) {
       return (await enviar<{ paciente: PacienteParaAsignacion }>(
         `${baseUrl}/pacientes?dni=${encodeURIComponent(dni)}`, solicitar,
